@@ -78,16 +78,9 @@
 
     header h1 {
       font-family: 'Pacifico', cursive;
-      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-size: clamp(1.4rem, 2.8vw, 2rem);
       line-height: 1;
-      /* Cross-stitch fill: two 45° grids of fine lines crossing to form X marks */
-      background-image:
-        repeating-linear-gradient( 45deg, var(--logo-color) 0px, var(--logo-color) 1.5px, transparent 1.5px, transparent 7px),
-        repeating-linear-gradient(-45deg, var(--logo-color) 0px, var(--logo-color) 1.5px, transparent 1.5px, transparent 7px);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      color: transparent;
+      color: var(--logo-color);
     }
 
     /* Ghost pill — shared by both header buttons */
