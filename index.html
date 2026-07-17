@@ -3,124 +3,216 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Temperature Blanket</title>
+  <title>Woolly Weather</title>
   <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       font-family: sans-serif;
-      max-width: 900px;
-      margin: 2rem auto;
-      padding: 0 1rem;
-    }
-
-    /* ----- Controls row ----- */
-    #controls {
-      display: flex;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-      align-items: flex-end;
-      margin-bottom: 0.5rem;
-    }
-    .field {
+      height: 100vh;
       display: flex;
       flex-direction: column;
-      gap: 0.25rem;
-      font-size: 0.85rem;
+      overflow: hidden;
     }
-    input, select, button {
-      padding: 0.35rem 0.5rem;
-      font-size: 1rem;
-    }
-    #generate-btn { cursor: pointer; }
 
-    /* ----- Location autocomplete ----- */
+    /* ── Header ── */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1.5rem;
+      border-bottom: 1px solid #ddd;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 1.5rem; }
+    #view-more-btn { padding: 0.35rem 0.9rem; cursor: pointer; font-size: 0.9rem; }
+
+    /* ── Two-column main ── */
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Left: blanket area */
+    #blanket-col {
+      flex: 0 0 58%;
+      border-right: 1px solid #ddd;
+      overflow-y: auto;
+      padding: 1rem 1rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    #blanket-placeholder {
+      color: #bbb;
+      font-size: 0.9rem;
+      padding-top: 0.5rem;
+    }
+    #blanket-wrap svg { display: block; width: 100%; }
+
+    #legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem 0.7rem;
+      font-size: 0.75rem;
+    }
+    .swatch {
+      display: inline-block;
+      width: 10px; height: 10px;
+      vertical-align: middle;
+      margin-right: 3px;
+      border: 1px solid #aaa;
+    }
+
+    /* Right: controls */
+    #controls-col {
+      flex: 1;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+      overflow-y: auto;
+    }
+
+    /* Instructions box */
+    #instructions {
+      font-size: 0.82rem;
+      color: #444;
+      border: 1px solid #ddd;
+      padding: 0.65rem 0.8rem;
+      line-height: 1.5;
+    }
+    #instructions strong { display: block; margin-bottom: 0.3rem; font-size: 0.85rem; }
+
+    /* Form fields */
+    .field { display: flex; flex-direction: column; gap: 0.3rem; }
+    .field label { font-size: 0.85rem; font-weight: 600; }
+    input, select {
+      padding: 0.4rem 0.5rem;
+      font-size: 0.95rem;
+      width: 100%;
+    }
+
+    /* Location autocomplete dropdown */
     #place-wrapper  { position: relative; }
-    #place-input    { width: 240px; box-sizing: border-box; }
     #place-dropdown {
       display: none;
       position: absolute;
-      top: 100%;
-      left: 0;
-      min-width: 100%;
+      top: 100%; left: 0; right: 0;
       background: #fff;
       border: 1px solid #bbb;
       border-top: none;
       z-index: 20;
-      max-height: 220px;
+      max-height: 200px;
       overflow-y: auto;
-      box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.12);
     }
     .place-opt {
       padding: 0.4rem 0.6rem;
       cursor: pointer;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       white-space: nowrap;
     }
     .place-opt:hover,
     .place-opt[aria-selected="true"] { background: #e8f0fe; }
 
-    /* ----- Year notice ----- */
-    #year-notice {
-      font-size: 0.85rem;
-      font-style: italic;
-      color: #555;
-      min-height: 1.2em;
-      margin-bottom: 0.4rem;
+    /* Partial-year notice + status */
+    #year-notice { font-size: 0.8rem; color: #666; font-style: italic; min-height: 1em; }
+    #status      { font-size: 0.82rem; color: #444; min-height: 1em; }
+    #status.error { color: #c00; }
+
+    #generate-btn {
+      padding: 0.5rem;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
     }
 
-    /* ----- Status / output ----- */
-    #status       { font-size: 0.9rem; color: #444; min-height: 1.4em; margin-bottom: 0.5rem; }
-    #status.error { color: #c00; }
-    #blanket-wrap { width: 100%; }
-    #blanket-wrap svg { display: block; width: 100%; }
-    #legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.4rem 0.8rem;
-      margin-top: 0.75rem;
+    /* Note from designer — pinned to bottom of right column */
+    #designer-note {
+      margin-top: auto;
+      border: 1px solid #ccc;
+      padding: 0.65rem 0.8rem;
       font-size: 0.8rem;
+      color: #555;
+      line-height: 1.5;
     }
-    .swatch {
-      display: inline-block;
-      width: 12px; height: 12px;
-      vertical-align: middle;
-      margin-right: 3px;
-      border: 1px solid #aaa;
+    #designer-note strong { display: block; margin-bottom: 0.25rem; font-size: 0.82rem; }
+
+    /* Responsive: stack on narrow screens */
+    @media (max-width: 640px) {
+      body { overflow: auto; height: auto; }
+      main { flex-direction: column; overflow: visible; }
+      #blanket-col { flex: none; border-right: none; border-bottom: 1px solid #ddd; }
+      #controls-col { overflow: visible; }
     }
   </style>
 </head>
 <body>
-  <h1>Temperature Blanket Generator</h1>
-  <p>Each row is one day, coloured by average temperature.
-     Data from <a href="https://open-meteo.com" target="_blank">Open-Meteo</a>.</p>
 
-  <div id="controls">
-    <div class="field">
-      <label for="place-input">Location</label>
-      <div id="place-wrapper">
-        <input type="text" id="place-input"
-               placeholder="Start typing a place…"
-               autocomplete="off" aria-autocomplete="list"
-               aria-controls="place-dropdown">
-        <div id="place-dropdown" role="listbox"></div>
+  <header>
+    <h1>Woolly Weather</h1>
+    <button id="view-more-btn">View more blankets</button>
+  </header>
+
+  <main>
+
+    <!-- ── Left column: blanket ── -->
+    <div id="blanket-col">
+      <div id="blanket-wrap">
+        <p id="blanket-placeholder">Your blanket will appear here.</p>
       </div>
+      <div id="legend"></div>
     </div>
 
-    <div class="field">
-      <label for="year-select">Year</label>
-      <select id="year-select"></select>
+    <!-- ── Right column: controls ── -->
+    <div id="controls-col">
+
+      <div id="instructions">
+        <strong>Instructions</strong>
+        A temperature blanket gives every day of the year its own colour based on
+        how warm or cold it was. Pick a place and a year — each horizontal row
+        below represents one day, shaded from icy blues through to fiery reds.
+        Data is fetched live from <a href="https://open-meteo.com" target="_blank">Open-Meteo</a>.
+      </div>
+
+      <div class="field">
+        <label for="place-input">Place</label>
+        <div id="place-wrapper">
+          <input type="text" id="place-input"
+                 placeholder="Start typing a place…"
+                 autocomplete="off"
+                 aria-autocomplete="list"
+                 aria-controls="place-dropdown">
+          <div id="place-dropdown" role="listbox"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="year-select">Year</label>
+        <select id="year-select"></select>
+      </div>
+
+      <div id="year-notice"></div>
+
+      <button id="generate-btn">Generate</button>
+
+      <div id="status"></div>
+
+      <div id="designer-note">
+        <strong>Note from the designer</strong>
+        Temperature blankets are a beloved knitting and crochet tradition — one stripe
+        per day, colour chosen by the thermometer. This tool generates the colour plan
+        for any place and year so you can cast on straight away.
+      </div>
+
     </div>
-
-    <button id="generate-btn">Generate</button>
-  </div>
-
-  <div id="year-notice"></div>
-  <div id="status">Enter a location and choose a year, then click Generate.</div>
-  <div id="blanket-wrap"></div>
-  <div id="legend"></div>
+  </main>
 
   <script>
     // -------------------------------------------------------------------------
-    // Colour scale — maps average °C to a colour band.
+    // Colour scale — maps average °C to a colour band
     // -------------------------------------------------------------------------
     const COLOUR_SCALE = [
       { below: -20,      hex: '#1a0050', label: '< −20'      },
@@ -146,7 +238,6 @@
     // -------------------------------------------------------------------------
     // Date helpers
     // -------------------------------------------------------------------------
-
     function toISODate(date) {
       const y = date.getFullYear();
       const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -161,7 +252,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // Year select — populate and handle partial-year notice
+    // Year select — populate and update partial-year notice
     // -------------------------------------------------------------------------
     const THIS_YEAR = new Date().getFullYear();
 
@@ -171,22 +262,19 @@
         const opt = document.createElement('option');
         opt.value = y;
         opt.textContent = y;
-        // Default to the most recent complete year
-        if (y === THIS_YEAR - 1) opt.selected = true;
+        if (y === THIS_YEAR - 1) opt.selected = true; // default to last complete year
         sel.appendChild(opt);
       }
       refreshYearNotice();
     }
 
     function refreshYearNotice() {
-      const year    = parseInt(document.getElementById('year-select').value, 10);
-      const notice  = document.getElementById('year-notice');
-
+      const year   = parseInt(document.getElementById('year-select').value, 10);
+      const notice = document.getElementById('year-notice');
       if (year === THIS_YEAR) {
-        // Archive data lags ~5 days; show what will actually be fetched
-        const safeEnd    = shiftDays(new Date(), -5);
-        const safeStart  = new Date(THIS_YEAR, 0, 1);
-        const dayCount   = Math.round((safeEnd - safeStart) / 86400000) + 1;
+        const safeEnd   = shiftDays(new Date(), -5);
+        const safeStart = new Date(THIS_YEAR, 0, 1);
+        const dayCount  = Math.round((safeEnd - safeStart) / 86400000) + 1;
         notice.textContent =
           `${THIS_YEAR} isn't over yet — only the ${dayCount} completed days ` +
           `(up to ${toISODate(safeEnd)}) will be shown.`;
@@ -198,7 +286,7 @@
     // -------------------------------------------------------------------------
     // Location autocomplete
     // -------------------------------------------------------------------------
-    let pickedLocation = null; // { latitude, longitude, label } — set on dropdown pick
+    let pickedLocation = null; // { latitude, longitude, label }
     let debounceTimer  = null;
     let activeOptIdx   = -1;
 
@@ -207,12 +295,9 @@
     }
 
     async function onPlaceInput() {
-      // Any typing after a pick invalidates the stored coordinates
-      pickedLocation = null;
-
+      pickedLocation = null; // typing invalidates any previous pick
       const query = document.getElementById('place-input').value.trim();
       clearTimeout(debounceTimer);
-
       if (query.length < 2) { closeDropdown(); return; }
 
       debounceTimer = setTimeout(async () => {
@@ -220,12 +305,9 @@
           const url =
             `https://geocoding-api.open-meteo.com/v1/search` +
             `?name=${encodeURIComponent(query)}&count=6&language=en&format=json`;
-          const res  = await fetch(url);
-          const json = await res.json();
+          const json = await (await fetch(url)).json();
           populateDropdown(json.results || []);
-        } catch {
-          closeDropdown();
-        }
+        } catch { closeDropdown(); }
       }, 280);
     }
 
@@ -233,7 +315,6 @@
       const dd = document.getElementById('place-dropdown');
       activeOptIdx = -1;
       dd.innerHTML = '';
-
       if (!results.length) { closeDropdown(); return; }
 
       results.forEach(r => {
@@ -242,11 +323,10 @@
         div.className = 'place-opt';
         div.setAttribute('role', 'option');
         div.textContent = label;
-        // mousedown fires before blur, so preventDefault keeps the input focused
+        // mousedown before blur so the click registers before the input loses focus
         div.addEventListener('mousedown', e => { e.preventDefault(); pickOption(r, label); });
         dd.appendChild(div);
       });
-
       dd.style.display = 'block';
     }
 
@@ -257,16 +337,15 @@
     }
 
     function closeDropdown() {
-      const dd = document.getElementById('place-dropdown');
-      dd.style.display = 'none';
+      document.getElementById('place-dropdown').style.display = 'none';
       activeOptIdx = -1;
     }
 
     function onPlaceKeydown(e) {
       const dd = document.getElementById('place-dropdown');
       if (dd.style.display !== 'block') return;
-
       const opts = getOpts();
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         activeOptIdx = Math.min(activeOptIdx + 1, opts.length - 1);
@@ -284,11 +363,12 @@
     }
 
     function syncActive(opts) {
-      opts.forEach((o, i) => o.setAttribute('aria-selected', i === activeOptIdx ? 'true' : 'false'));
+      opts.forEach((o, i) =>
+        o.setAttribute('aria-selected', i === activeOptIdx ? 'true' : 'false'));
     }
 
     // -------------------------------------------------------------------------
-    // Geocoding — used when user types freely without picking from dropdown
+    // Geocoding fallback (when user types freely without picking from dropdown)
     // -------------------------------------------------------------------------
     async function geocode(placeName) {
       const url =
@@ -298,9 +378,12 @@
       if (!res.ok) throw new Error(`Geocoding HTTP ${res.status}`);
       const json = await res.json();
       if (!json.results?.length) throw new Error(`No results for "${placeName}"`);
-      const r     = json.results[0];
-      const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
-      return { latitude: r.latitude, longitude: r.longitude, label };
+      const r = json.results[0];
+      return {
+        latitude:  r.latitude,
+        longitude: r.longitude,
+        label: [r.name, r.admin1, r.country].filter(Boolean).join(', '),
+      };
     }
 
     // -------------------------------------------------------------------------
@@ -330,12 +413,12 @@
     }
 
     // -------------------------------------------------------------------------
-    // Sample data fallback — sine-wave seasonal model for a date range
+    // Sample data fallback — sine-wave seasonal model
     // -------------------------------------------------------------------------
     function makeSampleData(startDateStr, endDateStr) {
       const days = [];
-      let cur = new Date(startDateStr + 'T12:00:00');
-      const end = new Date(endDateStr + 'T12:00:00');
+      let cur    = new Date(startDateStr + 'T12:00:00');
+      const end  = new Date(endDateStr   + 'T12:00:00');
 
       while (cur <= end) {
         const doy      = Math.round((cur - new Date(cur.getFullYear(), 0, 0)) / 86400000);
@@ -359,46 +442,44 @@
     // -------------------------------------------------------------------------
     function renderBlanket(days) {
       const wrap = document.getElementById('blanket-wrap');
+      // Remove placeholder text on first render
+      const placeholder = document.getElementById('blanket-placeholder');
+      if (placeholder) placeholder.remove();
       wrap.innerHTML = '';
 
-      const ROW_H  = 14;   // px per day-row in viewBox units
-      const WIDTH  = 800;  // viewBox width; CSS scales to 100%
-      const HEIGHT = days.length * ROW_H;
+      const ROW_H = 14;
+      const WIDTH = 800; // viewBox units; CSS scales to 100%
 
       const NS  = 'http://www.w3.org/2000/svg';
       const svg = document.createElementNS(NS, 'svg');
-      svg.setAttribute('viewBox', `0 0 ${WIDTH} ${HEIGHT}`);
+      svg.setAttribute('viewBox', `0 0 ${WIDTH} ${days.length * ROW_H}`);
       svg.setAttribute('preserveAspectRatio', 'none');
-      svg.style.height = `${Math.min(HEIGHT, 720)}px`; // cap tall blankets
+      // Let SVG be its natural height so the left column scrolls
+      svg.style.height = `${days.length * ROW_H}px`;
 
       days.forEach((day, i) => {
         const rect = document.createElementNS(NS, 'rect');
         rect.setAttribute('x',      0);
         rect.setAttribute('y',      i * ROW_H);
         rect.setAttribute('width',  WIDTH);
-        rect.setAttribute('height', ROW_H - 1); // 1 px gap
+        rect.setAttribute('height', ROW_H - 1);
         rect.setAttribute('fill',   tempToHex(day.avg));
 
         const tip = document.createElementNS(NS, 'title');
         tip.textContent =
-          `${day.date}` +
-          `  avg ${day.avg.toFixed(1)} °C` +
+          `${day.date}  avg ${day.avg.toFixed(1)} °C` +
           `  (high ${day.high?.toFixed(1) ?? 'n/a'} / low ${day.low?.toFixed(1) ?? 'n/a'})` +
           (day.sample ? '  [sample]' : '');
         rect.appendChild(tip);
-
         svg.appendChild(rect);
       });
 
       wrap.appendChild(svg);
     }
 
-    // -------------------------------------------------------------------------
-    // Legend
-    // -------------------------------------------------------------------------
     function renderLegend() {
       const el = document.getElementById('legend');
-      el.innerHTML = '<strong>°C colour key:</strong> ';
+      el.innerHTML = '<strong style="width:100%;font-size:0.8rem;">°C colour key:</strong>';
       for (const band of COLOUR_SCALE) {
         const span = document.createElement('span');
         span.innerHTML =
@@ -411,7 +492,7 @@
     // Status line
     // -------------------------------------------------------------------------
     function setStatus(msg, isError = false) {
-      const el = document.getElementById('status');
+      const el  = document.getElementById('status');
       el.textContent = msg;
       el.className   = isError ? 'error' : '';
     }
@@ -430,17 +511,15 @@
       document.getElementById('blanket-wrap').innerHTML = '';
       document.getElementById('legend').innerHTML       = '';
 
-      // Date range for the selected year
       const startDate = `${year}-01-01`;
       const endDate   = year === THIS_YEAR
-        ? toISODate(shiftDays(new Date(), -5))  // cap at today − 5 for current year
+        ? toISODate(shiftDays(new Date(), -5))
         : `${year}-12-31`;
 
       let days;
       let usedSample = false;
 
       try {
-        // Resolve location — use the stored pick if available, otherwise geocode
         let loc;
         if (pickedLocation) {
           loc = pickedLocation;
@@ -468,8 +547,8 @@
 
       if (usedSample) {
         const warn = document.createElement('p');
-        warn.style.color = '#c00';
-        warn.textContent = '⚠ Sample data — not real weather.';
+        warn.style.cssText = 'color:#c00;font-size:0.8rem;margin-bottom:0.4rem;';
+        warn.textContent   = '⚠ Sample data — not real weather.';
         document.getElementById('blanket-wrap').prepend(warn);
       }
 
@@ -484,11 +563,15 @@
     document.getElementById('generate-btn').addEventListener('click', generate);
     document.getElementById('year-select').addEventListener('change', refreshYearNotice);
 
+    document.getElementById('view-more-btn').addEventListener('click', () => {
+      alert('More blankets coming soon!');
+    });
+
     const placeEl = document.getElementById('place-input');
     placeEl.addEventListener('input',   onPlaceInput);
     placeEl.addEventListener('keydown', onPlaceKeydown);
-    // Slight delay so a mousedown-triggered pick registers before blur hides the list
     placeEl.addEventListener('blur', () => setTimeout(closeDropdown, 160));
   </script>
+
 </body>
 </html>
