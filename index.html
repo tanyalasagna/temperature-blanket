@@ -7,7 +7,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,700;1,9..144,900&family=DM+Sans:wght@300;400;500&family=Pacifico&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,700;1,9..144,900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
   <style>
     /* ── Design tokens ── */
@@ -20,7 +20,6 @@
       --muted:       #6e6358;
       --cta-bg:      #f3ede4;
       --cta-text:    #12100e;
-      --logo-color:  #f3ede4;
       --r-card:      22px;
       --r-input:     10px;
       --r-pill:      999px;
@@ -39,18 +38,17 @@
         --muted:      #7a7060;
         --cta-bg:     #18140e;
         --cta-text:   #f5f0e6;
-        --logo-color: #18140e;
       }
     }
     :root[data-theme="dark"] {
       --bg:         #12100e; --surface:    #1c1916; --surface-hi: #252119;
       --rule:       #302b25; --text:       #f3ede4; --muted:      #6e6358;
-      --cta-bg:     #f3ede4; --cta-text:   #12100e; --logo-color: #f3ede4;
+      --cta-bg:     #f3ede4; --cta-text:   #12100e;
     }
     :root[data-theme="light"] {
       --bg:         #f5f0e6; --surface:    #ede7d9; --surface-hi: #e2dace;
       --rule:       #ccc5b5; --text:       #18140e; --muted:      #7a7060;
-      --cta-bg:     #18140e; --cta-text:   #f5f0e6; --logo-color: #18140e;
+      --cta-bg:     #18140e; --cta-text:   #f5f0e6;
     }
 
     /* ── Reset ── */
@@ -77,10 +75,14 @@
     }
 
     header h1 {
-      font-family: 'Pacifico', cursive;
-      font-size: clamp(1.4rem, 2.8vw, 2rem);
+      font-family: var(--display);
+      font-style: italic;
+      font-weight: 900;
+      font-size: clamp(1.7rem, 3.2vw, 2.5rem);
+      color: var(--text);
+      letter-spacing: -0.025em;
       line-height: 1;
-      color: var(--logo-color);
+      font-variation-settings: 'opsz' 72, 'WONK' 1;
     }
 
     /* Ghost pill — shared by both header buttons */
