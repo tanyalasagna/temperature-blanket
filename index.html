@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Temperature Blanket</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+
+    /* ----- Controls row ----- */
+    #controls {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      margin-bottom: 0.5rem;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.85rem;
+    }
+    input, select, button {
+      padding: 0.35rem 0.5rem;
+      font-size: 1rem;
+    }
+    #generate-btn { cursor: pointer; }
+
+    /* ----- Location autocomplete ----- */
+    #place-wrapper  { position: relative; }
+    #place-input    { width: 240px; box-sizing: border-box; }
+    #place-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      min-width: 100%;
+      background: #fff;
+      border: 1px solid #bbb;
+      border-top: none;
+      z-index: 20;
+      max-height: 220px;
+      overflow-y: auto;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+    }
+    .place-opt {
+      padding: 0.4rem 0.6rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+    .place-opt:hover,
+    .place-opt[aria-selected="true"] { background: #e8f0fe; }
+
+    /* ----- Year notice ----- */
+    #year-notice {
+      font-size: 0.85rem;
+      font-style: italic;
+      color: #555;
+      min-height: 1.2em;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ----- Status / output ----- */
+    #status       { font-size: 0.9rem; color: #444; min-height: 1.4em; margin-bottom: 0.5rem; }
+    #status.error { color: #c00; }
+    #blanket-wrap { width: 100%; }
+    #blanket-wrap svg { display: block; width: 100%; }
+    #legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem 0.8rem;
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+    }
+    .swatch {
+      display: inline-block;
+      width: 12px; height: 12px;
+      vertical-align: middle;
+      margin-right: 3px;
+      border: 1px solid #aaa;
+    }
+  </style>
+</head>
+<body>
+  <h1>Temperature Blanket Generator</h1>
+  <p>Each row is one day, coloured by average temperature.
+     Data from <a href="https://open-meteo.com" target="_blank">Open-Meteo</a>.</p>
+
+  <div id="controls">
+    <div class="field">
+      <label for="place-input">Location</label>
+      <div id="place-wrapper">
+        <input type="text" id="place-input"
+               placeholder="Start typing a place…"
+               autocomplete="off" aria-autocomplete="list"
+               aria-controls="place-dropdown">
+        <div id="place-dropdown" role="listbox"></div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="year-select">Year</label>
+      <select id="year-select"></select>
+    </div>
+
+    <button id="generate-btn">Generate</button>
+  </div>
+
+  <div id="year-notice"></div>
+  <div id="status">Enter a location and choose a year, then click Generate.</div>
+  <div id="blanket-wrap"></div>
+  <div id="legend"></div>
+
+  <script>
+    // -------------------------------------------------------------------------
+    // Colour scale — maps average °C to a colour band.
+    // -------------------------------------------------------------------------
+    const COLOUR_SCALE = [
+      { below: -20,      hex: '#1a0050', label: '< −20'      },
+      { below: -10,      hex: '#0000cd', label: '−20 to −10' },
+      { below:   0,      hex: '#4169e1', label: '−10 to 0'   },
+      { below:   5,      hex: '#00bfff', label: '0 to 5'     },
+      { below:  10,      hex: '#20b2aa', label: '5 to 10'    },
+      { below:  15,      hex: '#2e8b57', label: '10 to 15'   },
+      { below:  20,      hex: '#9acd32', label: '15 to 20'   },
+      { below:  25,      hex: '#ffd700', label: '20 to 25'   },
+      { below:  30,      hex: '#ff8c00', label: '25 to 30'   },
+      { below:  35,      hex: '#ff4500', label: '30 to 35'   },
+      { below: Infinity, hex: '#8b0000', label: '> 35'       },
+    ];
+
+    function tempToHex(degC) {
+      for (const band of COLOUR_SCALE) {
+        if (degC < band.below) return band.hex;
+      }
+      return COLOUR_SCALE[COLOUR_SCALE.length - 1].hex;
+    }
+
+    // -------------------------------------------------------------------------
+    // Date helpers
+    // -------------------------------------------------------------------------
+
+    function toISODate(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function shiftDays(date, n) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + n);
+      return d;
+    }
+
+    // -------------------------------------------------------------------------
+    // Year select — populate and handle partial-year notice
+    // -------------------------------------------------------------------------
+    const THIS_YEAR = new Date().getFullYear();
+
+    function buildYearSelect() {
+      const sel = document.getElementById('year-select');
+      for (let y = THIS_YEAR; y >= 2000; y--) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        // Default to the most recent complete year
+        if (y === THIS_YEAR - 1) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      refreshYearNotice();
+    }
+
+    function refreshYearNotice() {
+      const year    = parseInt(document.getElementById('year-select').value, 10);
+      const notice  = document.getElementById('year-notice');
+
+      if (year === THIS_YEAR) {
+        // Archive data lags ~5 days; show what will actually be fetched
+        const safeEnd    = shiftDays(new Date(), -5);
+        const safeStart  = new Date(THIS_YEAR, 0, 1);
+        const dayCount   = Math.round((safeEnd - safeStart) / 86400000) + 1;
+        notice.textContent =
+          `${THIS_YEAR} isn't over yet — only the ${dayCount} completed days ` +
+          `(up to ${toISODate(safeEnd)}) will be shown.`;
+      } else {
+        notice.textContent = '';
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Location autocomplete
+    // -------------------------------------------------------------------------
+    let pickedLocation = null; // { latitude, longitude, label } — set on dropdown pick
+    let debounceTimer  = null;
+    let activeOptIdx   = -1;
+
+    function getOpts() {
+      return Array.from(document.querySelectorAll('.place-opt'));
+    }
+
+    async function onPlaceInput() {
+      // Any typing after a pick invalidates the stored coordinates
+      pickedLocation = null;
+
+      const query = document.getElementById('place-input').value.trim();
+      clearTimeout(debounceTimer);
+
+      if (query.length < 2) { closeDropdown(); return; }
+
+      debounceTimer = setTimeout(async () => {
+        try {
+          const url =
+            `https://geocoding-api.open-meteo.com/v1/search` +
+            `?name=${encodeURIComponent(query)}&count=6&language=en&format=json`;
+          const res  = await fetch(url);
+          const json = await res.json();
+          populateDropdown(json.results || []);
+        } catch {
+          closeDropdown();
+        }
+      }, 280);
+    }
+
+    function populateDropdown(results) {
+      const dd = document.getElementById('place-dropdown');
+      activeOptIdx = -1;
+      dd.innerHTML = '';
+
+      if (!results.length) { closeDropdown(); return; }
+
+      results.forEach(r => {
+        const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+        const div   = document.createElement('div');
+        div.className = 'place-opt';
+        div.setAttribute('role', 'option');
+        div.textContent = label;
+        // mousedown fires before blur, so preventDefault keeps the input focused
+        div.addEventListener('mousedown', e => { e.preventDefault(); pickOption(r, label); });
+        dd.appendChild(div);
+      });
+
+      dd.style.display = 'block';
+    }
+
+    function pickOption(result, label) {
+      pickedLocation = { latitude: result.latitude, longitude: result.longitude, label };
+      document.getElementById('place-input').value = label;
+      closeDropdown();
+    }
+
+    function closeDropdown() {
+      const dd = document.getElementById('place-dropdown');
+      dd.style.display = 'none';
+      activeOptIdx = -1;
+    }
+
+    function onPlaceKeydown(e) {
+      const dd = document.getElementById('place-dropdown');
+      if (dd.style.display !== 'block') return;
+
+      const opts = getOpts();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeOptIdx = Math.min(activeOptIdx + 1, opts.length - 1);
+        syncActive(opts);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeOptIdx = Math.max(activeOptIdx - 1, -1);
+        syncActive(opts);
+      } else if (e.key === 'Enter' && activeOptIdx >= 0) {
+        e.preventDefault();
+        opts[activeOptIdx].dispatchEvent(new MouseEvent('mousedown'));
+      } else if (e.key === 'Escape') {
+        closeDropdown();
+      }
+    }
+
+    function syncActive(opts) {
+      opts.forEach((o, i) => o.setAttribute('aria-selected', i === activeOptIdx ? 'true' : 'false'));
+    }
+
+    // -------------------------------------------------------------------------
+    // Geocoding — used when user types freely without picking from dropdown
+    // -------------------------------------------------------------------------
+    async function geocode(placeName) {
+      const url =
+        `https://geocoding-api.open-meteo.com/v1/search` +
+        `?name=${encodeURIComponent(placeName)}&count=1&language=en&format=json`;
+      const res  = await fetch(url);
+      if (!res.ok) throw new Error(`Geocoding HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json.results?.length) throw new Error(`No results for "${placeName}"`);
+      const r     = json.results[0];
+      const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+      return { latitude: r.latitude, longitude: r.longitude, label };
+    }
+
+    // -------------------------------------------------------------------------
+    // Open-Meteo archive API
+    // -------------------------------------------------------------------------
+    async function fetchArchive(lat, lon, startDate, endDate) {
+      const url =
+        `https://archive-api.open-meteo.com/v1/archive` +
+        `?latitude=${lat}&longitude=${lon}` +
+        `&start_date=${startDate}&end_date=${endDate}` +
+        `&daily=temperature_2m_max,temperature_2m_min` +
+        `&timezone=auto`;
+      const res  = await fetch(url);
+      if (!res.ok) throw new Error(`Archive API HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json.daily?.time) throw new Error('Unexpected archive response shape');
+      return json.daily;
+    }
+
+    function parseDailyData(daily) {
+      return daily.time.map((date, i) => {
+        const high = daily.temperature_2m_max[i];
+        const low  = daily.temperature_2m_min[i];
+        const avg  = (high != null && low != null) ? (high + low) / 2 : (high ?? low ?? 0);
+        return { date, high, low, avg, sample: false };
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // Sample data fallback — sine-wave seasonal model for a date range
+    // -------------------------------------------------------------------------
+    function makeSampleData(startDateStr, endDateStr) {
+      const days = [];
+      let cur = new Date(startDateStr + 'T12:00:00');
+      const end = new Date(endDateStr + 'T12:00:00');
+
+      while (cur <= end) {
+        const doy      = Math.round((cur - new Date(cur.getFullYear(), 0, 0)) / 86400000);
+        const seasonal = 10 * Math.sin((doy / 365) * 2 * Math.PI - Math.PI / 2);
+        const noise    = (Math.random() - 0.5) * 6;
+        const avg      = 12 + seasonal + noise;
+        days.push({
+          date:   toISODate(cur),
+          high:   avg + 4 + Math.random() * 2,
+          low:    avg - 4 - Math.random() * 2,
+          avg,
+          sample: true,
+        });
+        cur = shiftDays(cur, 1);
+      }
+      return days;
+    }
+
+    // -------------------------------------------------------------------------
+    // SVG blanket renderer
+    // -------------------------------------------------------------------------
+    function renderBlanket(days) {
+      const wrap = document.getElementById('blanket-wrap');
+      wrap.innerHTML = '';
+
+      const ROW_H  = 14;   // px per day-row in viewBox units
+      const WIDTH  = 800;  // viewBox width; CSS scales to 100%
+      const HEIGHT = days.length * ROW_H;
+
+      const NS  = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', `0 0 ${WIDTH} ${HEIGHT}`);
+      svg.setAttribute('preserveAspectRatio', 'none');
+      svg.style.height = `${Math.min(HEIGHT, 720)}px`; // cap tall blankets
+
+      days.forEach((day, i) => {
+        const rect = document.createElementNS(NS, 'rect');
+        rect.setAttribute('x',      0);
+        rect.setAttribute('y',      i * ROW_H);
+        rect.setAttribute('width',  WIDTH);
+        rect.setAttribute('height', ROW_H - 1); // 1 px gap
+        rect.setAttribute('fill',   tempToHex(day.avg));
+
+        const tip = document.createElementNS(NS, 'title');
+        tip.textContent =
+          `${day.date}` +
+          `  avg ${day.avg.toFixed(1)} °C` +
+          `  (high ${day.high?.toFixed(1) ?? 'n/a'} / low ${day.low?.toFixed(1) ?? 'n/a'})` +
+          (day.sample ? '  [sample]' : '');
+        rect.appendChild(tip);
+
+        svg.appendChild(rect);
+      });
+
+      wrap.appendChild(svg);
+    }
+
+    // -------------------------------------------------------------------------
+    // Legend
+    // -------------------------------------------------------------------------
+    function renderLegend() {
+      const el = document.getElementById('legend');
+      el.innerHTML = '<strong>°C colour key:</strong> ';
+      for (const band of COLOUR_SCALE) {
+        const span = document.createElement('span');
+        span.innerHTML =
+          `<span class="swatch" style="background:${band.hex}"></span>${band.label}`;
+        el.appendChild(span);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Status line
+    // -------------------------------------------------------------------------
+    function setStatus(msg, isError = false) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className   = isError ? 'error' : '';
+    }
+
+    // -------------------------------------------------------------------------
+    // Generate
+    // -------------------------------------------------------------------------
+    async function generate() {
+      const placeText = document.getElementById('place-input').value.trim();
+      const year      = parseInt(document.getElementById('year-select').value, 10);
+      const btn       = document.getElementById('generate-btn');
+
+      if (!placeText) { setStatus('Enter a location.', true); return; }
+
+      btn.disabled = true;
+      document.getElementById('blanket-wrap').innerHTML = '';
+      document.getElementById('legend').innerHTML       = '';
+
+      // Date range for the selected year
+      const startDate = `${year}-01-01`;
+      const endDate   = year === THIS_YEAR
+        ? toISODate(shiftDays(new Date(), -5))  // cap at today − 5 for current year
+        : `${year}-12-31`;
+
+      let days;
+      let usedSample = false;
+
+      try {
+        // Resolve location — use the stored pick if available, otherwise geocode
+        let loc;
+        if (pickedLocation) {
+          loc = pickedLocation;
+        } else {
+          setStatus('Looking up location…');
+          loc = await geocode(placeText);
+        }
+
+        setStatus(`Found: ${loc.label}. Fetching temperatures for ${year}…`);
+
+        const daily = await fetchArchive(loc.latitude, loc.longitude, startDate, endDate);
+        days = parseDailyData(daily);
+
+        setStatus(`${loc.label} — ${days.length} days (${startDate} → ${endDate})`);
+
+      } catch (err) {
+        console.warn('Falling back to sample data:', err);
+        days       = makeSampleData(startDate, endDate);
+        usedSample = true;
+        setStatus(`Could not fetch data (${err.message}). Showing sample data.`, true);
+      }
+
+      renderBlanket(days);
+      renderLegend();
+
+      if (usedSample) {
+        const warn = document.createElement('p');
+        warn.style.color = '#c00';
+        warn.textContent = '⚠ Sample data — not real weather.';
+        document.getElementById('blanket-wrap').prepend(warn);
+      }
+
+      btn.disabled = false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Wire up
+    // -------------------------------------------------------------------------
+    buildYearSelect();
+
+    document.getElementById('generate-btn').addEventListener('click', generate);
+    document.getElementById('year-select').addEventListener('change', refreshYearNotice);
+
+    const placeEl = document.getElementById('place-input');
+    placeEl.addEventListener('input',   onPlaceInput);
+    placeEl.addEventListener('keydown', onPlaceKeydown);
+    // Slight delay so a mousedown-triggered pick registers before blur hides the list
+    placeEl.addEventListener('blur', () => setTimeout(closeDropdown, 160));
+  </script>
+</body>
+</html>
