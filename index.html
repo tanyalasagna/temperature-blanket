@@ -34,22 +34,27 @@
       overflow: hidden;
     }
 
-    /* Left: blanket area */
+    /* Left: blanket area — no scroll; SVG stretches to fill */
     #blanket-col {
       flex: 0 0 58%;
       border-right: 1px solid #ddd;
-      overflow-y: auto;
-      padding: 1rem 1rem 1.5rem;
+      overflow: hidden;
+      padding: 1rem;
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
     }
     #blanket-placeholder {
       color: #bbb;
       font-size: 0.9rem;
       padding-top: 0.5rem;
     }
-    #blanket-wrap svg { display: block; width: 100%; }
+    /* wrap grows to take all remaining height in the left column */
+    #blanket-wrap {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    #blanket-wrap svg { display: block; width: 100%; height: 100%; }
 
     #legend {
       display: flex;
@@ -144,7 +149,7 @@
     @media (max-width: 640px) {
       body { overflow: auto; height: auto; }
       main { flex-direction: column; overflow: visible; }
-      #blanket-col { flex: none; border-right: none; border-bottom: 1px solid #ddd; }
+      #blanket-col { flex: none; height: 60vh; border-right: none; border-bottom: 1px solid #ddd; }
       #controls-col { overflow: visible; }
     }
   </style>
@@ -163,7 +168,6 @@
       <div id="blanket-wrap">
         <p id="blanket-placeholder">Your blanket will appear here.</p>
       </div>
-      <div id="legend"></div>
     </div>
 
     <!-- ── Right column: controls ── -->
@@ -199,6 +203,8 @@
       <button id="generate-btn">Generate</button>
 
       <div id="status"></div>
+
+      <div id="legend"></div>
 
       <div id="designer-note">
         <strong>Note from the designer</strong>
@@ -454,8 +460,7 @@
       const svg = document.createElementNS(NS, 'svg');
       svg.setAttribute('viewBox', `0 0 ${WIDTH} ${days.length * ROW_H}`);
       svg.setAttribute('preserveAspectRatio', 'none');
-      // Let SVG be its natural height so the left column scrolls
-      svg.style.height = `${days.length * ROW_H}px`;
+      // CSS sets width/height:100% — viewBox + preserveAspectRatio:none does the scaling
 
       days.forEach((day, i) => {
         const rect = document.createElementNS(NS, 'rect');
