@@ -134,16 +134,47 @@
       width: 100%;
     }
 
-    /* Note from designer — pinned to bottom of right column */
-    #designer-note {
+    /* Note from designer button — pinned to bottom of right column */
+    #designer-note-btn {
       margin-top: auto;
-      border: 1px solid #ccc;
-      padding: 0.65rem 0.8rem;
-      font-size: 0.8rem;
-      color: #555;
-      line-height: 1.5;
+      padding: 0.35rem 0.9rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      align-self: flex-end;
     }
-    #designer-note strong { display: block; margin-bottom: 0.25rem; font-size: 0.82rem; }
+
+    /* Modal overlay */
+    #note-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #note-modal.open { display: flex; }
+    #note-modal-box {
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 1.25rem 1.5rem;
+      max-width: 380px;
+      width: 90%;
+      position: relative;
+      line-height: 1.6;
+      font-size: 0.88rem;
+      color: #444;
+    }
+    #note-modal-box strong { display: block; margin-bottom: 0.5rem; font-size: 0.92rem; }
+    #note-modal-close {
+      position: absolute;
+      top: 0.5rem; right: 0.75rem;
+      background: none;
+      border: none;
+      font-size: 1.1rem;
+      cursor: pointer;
+      color: #666;
+    }
 
     /* Responsive: stack on narrow screens */
     @media (max-width: 640px) {
@@ -206,15 +237,21 @@
 
       <div id="legend"></div>
 
-      <div id="designer-note">
-        <strong>Note from the designer</strong>
-        Temperature blankets are a beloved knitting and crochet tradition — one stripe
-        per day, colour chosen by the thermometer. This tool generates the colour plan
-        for any place and year so you can cast on straight away.
-      </div>
+      <button id="designer-note-btn">Note from the designer</button>
 
     </div>
   </main>
+
+  <!-- Designer note modal -->
+  <div id="note-modal" role="dialog" aria-modal="true" aria-labelledby="note-modal-title">
+    <div id="note-modal-box">
+      <button id="note-modal-close" aria-label="Close">✕</button>
+      <strong id="note-modal-title">Note from the designer</strong>
+      Temperature blankets are a beloved knitting and crochet tradition — one stripe
+      per day, colour chosen by the thermometer. This tool generates the colour plan
+      for any place and year so you can cast on straight away.
+    </div>
+  </div>
 
   <script>
     // -------------------------------------------------------------------------
@@ -570,6 +607,17 @@
 
     document.getElementById('view-more-btn').addEventListener('click', () => {
       alert('More blankets coming soon!');
+    });
+
+    const noteModal = document.getElementById('note-modal');
+    document.getElementById('designer-note-btn').addEventListener('click', () => {
+      noteModal.classList.add('open');
+    });
+    document.getElementById('note-modal-close').addEventListener('click', () => {
+      noteModal.classList.remove('open');
+    });
+    noteModal.addEventListener('click', e => {
+      if (e.target === noteModal) noteModal.classList.remove('open');
     });
 
     const placeEl = document.getElementById('place-input');
