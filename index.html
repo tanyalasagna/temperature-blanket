@@ -4,11 +4,60 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Woolly Weather</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,700;1,9..144,900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
   <style>
+    /* ── Design tokens ── */
+    :root {
+      --bg:          #12100e;
+      --surface:     #1c1916;
+      --surface-hi:  #252119;
+      --rule:        #302b25;
+      --text:        #f3ede4;
+      --muted:       #6e6358;
+      --cta-bg:      #f3ede4;
+      --cta-text:    #12100e;
+      --r-card:      22px;
+      --r-input:     10px;
+      --r-pill:      999px;
+      --display:     'Fraunces', Georgia, serif;
+      --sans:        'DM Sans', system-ui, sans-serif;
+    }
+
+    /* Light theme tokens */
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg:         #f5f0e6;
+        --surface:    #ede7d9;
+        --surface-hi: #e2dace;
+        --rule:       #ccc5b5;
+        --text:       #18140e;
+        --muted:      #7a7060;
+        --cta-bg:     #18140e;
+        --cta-text:   #f5f0e6;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg:         #12100e; --surface:    #1c1916; --surface-hi: #252119;
+      --rule:       #302b25; --text:       #f3ede4; --muted:      #6e6358;
+      --cta-bg:     #f3ede4; --cta-text:   #12100e;
+    }
+    :root[data-theme="light"] {
+      --bg:         #f5f0e6; --surface:    #ede7d9; --surface-hi: #e2dace;
+      --rule:       #ccc5b5; --text:       #18140e; --muted:      #7a7060;
+      --cta-bg:     #18140e; --cta-text:   #f5f0e6;
+    }
+
+    /* ── Reset ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: sans-serif;
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
       height: 100vh;
       display: flex;
       flex-direction: column;
@@ -20,167 +69,296 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.75rem 1.5rem;
-      border-bottom: 1px solid #ddd;
+      padding: 0.7rem 1.1rem;
+      border-bottom: 1px solid var(--rule);
       flex-shrink: 0;
     }
-    header h1 { font-size: 1.5rem; }
-    #view-more-btn { padding: 0.35rem 0.9rem; cursor: pointer; font-size: 0.9rem; }
 
-    /* ── Two-column main ── */
+    header h1 {
+      font-family: var(--display);
+      font-style: italic;
+      font-weight: 900;
+      font-size: clamp(1.7rem, 3.2vw, 2.5rem);
+      color: var(--text);
+      letter-spacing: -0.025em;
+      line-height: 1;
+      font-variation-settings: 'opsz' 72, 'WONK' 1;
+    }
+
+    /* Ghost pill — shared by both header buttons */
+    .ghost-pill {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-pill);
+      padding: 0.4rem 1rem;
+      font-family: var(--sans);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s ease, border-color 0.15s ease;
+      white-space: nowrap;
+    }
+    .ghost-pill:hover { color: var(--text); border-color: var(--muted); }
+
+    /* ── Layout ── */
     main {
       display: flex;
       flex: 1;
       overflow: hidden;
+      padding: 0.85rem 1rem;
+      gap: 0.85rem;
     }
 
-    /* Left: blanket area — no scroll; SVG stretches to fill */
+    /* ── Left: blanket card ── */
     #blanket-col {
-      flex: 0 0 58%;
-      border-right: 1px solid #ddd;
+      flex: 0 0 60%;
+      background: var(--surface);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-card);
       overflow: hidden;
-      padding: 1rem;
       display: flex;
       flex-direction: column;
+      padding: 0.85rem;
     }
-    #blanket-placeholder {
-      color: #bbb;
-      font-size: 0.9rem;
-      padding-top: 0.5rem;
-    }
-    /* wrap grows to take all remaining height in the left column */
+
     #blanket-wrap {
       flex: 1;
       min-height: 0;
+      border-radius: 14px;
       overflow: hidden;
-    }
-    #blanket-wrap svg { display: block; width: 100%; height: 100%; }
-
-    #legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.3rem 0.7rem;
-      font-size: 0.75rem;
-    }
-    .swatch {
-      display: inline-block;
-      width: 10px; height: 10px;
-      vertical-align: middle;
-      margin-right: 3px;
-      border: 1px solid #aaa;
+      background: var(--bg); /* shows between rows if any gap */
     }
 
-    /* Right: controls */
+    #blanket-placeholder {
+      color: var(--muted);
+      font-size: 0.82rem;
+      padding: 0.5rem;
+    }
+
+    #blanket-wrap svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Right: controls ── */
     #controls-col {
       flex: 1;
-      padding: 1rem 1.25rem;
+      min-width: 0;
       display: flex;
       flex-direction: column;
-      gap: 0.9rem;
+      gap: 0.85rem;
       overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--rule) transparent;
     }
 
-    /* Instructions box */
+    /* ── Instructions card ── */
     #instructions {
-      font-size: 0.82rem;
-      color: #444;
-      border: 1px solid #ddd;
-      padding: 0.65rem 0.8rem;
-      line-height: 1.5;
+      background: var(--surface);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-card);
+      padding: 0.9rem 1rem;
+      font-size: 0.8rem;
+      line-height: 1.7;
+      color: var(--muted);
     }
-    #instructions strong { display: block; margin-bottom: 0.3rem; font-size: 0.85rem; }
+    #instructions strong {
+      display: block;
+      font-family: var(--display);
+      font-style: italic;
+      font-weight: 700;
+      font-variation-settings: 'opsz' 14;
+      font-size: 1rem;
+      color: var(--text);
+      margin-bottom: 0.35rem;
+    }
+    #instructions a { color: var(--text); text-underline-offset: 3px; }
 
-    /* Form fields */
-    .field { display: flex; flex-direction: column; gap: 0.3rem; }
-    .field label { font-size: 0.85rem; font-weight: 600; }
+    /* ── Form fields ── */
+    .field { display: flex; flex-direction: column; gap: 0.35rem; }
+
+    .field label {
+      font-size: 0.68rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
     input, select {
-      padding: 0.4rem 0.5rem;
-      font-size: 0.95rem;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-input);
+      padding: 0.55rem 0.8rem;
+      font-family: var(--sans);
+      font-size: 0.9rem;
       width: 100%;
+      appearance: none;
+      -webkit-appearance: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--muted);
+    }
+    input::placeholder { color: var(--muted); }
+    option { background: var(--surface-hi); color: var(--text); }
+
+    /* Custom select chevron */
+    .select-wrap { position: relative; }
+    .select-wrap::after {
+      content: '▾';
+      position: absolute;
+      right: 0.8rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+      font-size: 0.72rem;
     }
 
-    /* Location autocomplete dropdown */
-    #place-wrapper  { position: relative; }
+    /* ── Autocomplete dropdown ── */
+    #place-wrapper { position: relative; }
     #place-dropdown {
       display: none;
       position: absolute;
-      top: 100%; left: 0; right: 0;
-      background: #fff;
-      border: 1px solid #bbb;
-      border-top: none;
+      top: calc(100% + 5px);
+      left: 0; right: 0;
+      background: var(--surface-hi);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-input);
       z-index: 20;
-      max-height: 200px;
+      max-height: 190px;
       overflow-y: auto;
-      box-shadow: 0 3px 6px rgba(0,0,0,0.12);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.45);
     }
     .place-opt {
-      padding: 0.4rem 0.6rem;
+      padding: 0.5rem 0.8rem;
       cursor: pointer;
-      font-size: 0.88rem;
-      white-space: nowrap;
+      font-size: 0.83rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--rule);
+      transition: color 0.1s, background 0.1s;
     }
+    .place-opt:last-child { border-bottom: none; }
     .place-opt:hover,
-    .place-opt[aria-selected="true"] { background: #e8f0fe; }
+    .place-opt[aria-selected="true"] {
+      background: var(--surface);
+      color: var(--text);
+    }
 
-    /* Partial-year notice + status */
-    #year-notice { font-size: 0.8rem; color: #666; font-style: italic; min-height: 1em; }
-    #status      { font-size: 0.82rem; color: #444; min-height: 1em; }
-    #status.error { color: #c00; }
+    /* ── Notices ── */
+    #year-notice {
+      font-size: 0.76rem;
+      color: var(--muted);
+      line-height: 1.55;
+      min-height: 1em;
+    }
+    #status {
+      font-size: 0.76rem;
+      color: var(--muted);
+      line-height: 1.55;
+      min-height: 1em;
+    }
+    #status.error { color: #d95f5f; }
 
+    /* ── Generate ── */
     #generate-btn {
-      padding: 0.5rem;
-      font-size: 1rem;
+      background: var(--cta-bg);
+      color: var(--cta-text);
+      border: none;
+      border-radius: var(--r-pill);
+      padding: 0.75rem 1rem;
+      font-family: var(--display);
+      font-style: italic;
+      font-weight: 700;
+      font-variation-settings: 'opsz' 14, 'WONK' 1;
+      font-size: 1.1rem;
+      letter-spacing: -0.01em;
       cursor: pointer;
       width: 100%;
+      transition: opacity 0.15s;
+    }
+    #generate-btn:hover    { opacity: 0.88; }
+    #generate-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* ── Legend ── */
+    #legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.22rem 0.55rem;
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+    .swatch {
+      display: inline-block;
+      width: 9px; height: 9px;
+      border-radius: 3px;
+      vertical-align: middle;
+      margin-right: 3px;
     }
 
-    /* Note from designer button — pinned to bottom of right column */
-    #designer-note-btn {
+    /* ── Bottom row: designer note button ── */
+    #bottom-row {
       margin-top: auto;
-      padding: 0.35rem 0.9rem;
-      cursor: pointer;
-      font-size: 0.9rem;
-      align-self: flex-end;
+      display: flex;
+      justify-content: flex-end;
     }
 
-    /* Modal overlay */
+    /* ── Modal ── */
     #note-modal {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.35);
+      background: rgba(0,0,0,0.65);
       z-index: 100;
       align-items: center;
       justify-content: center;
     }
     #note-modal.open { display: flex; }
     #note-modal-box {
-      background: #fff;
-      border: 1px solid #ccc;
-      padding: 1.25rem 1.5rem;
-      max-width: 380px;
+      background: var(--surface-hi);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-card);
+      padding: 1.5rem 1.6rem;
+      max-width: 360px;
       width: 90%;
       position: relative;
-      line-height: 1.6;
-      font-size: 0.88rem;
-      color: #444;
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.7;
     }
-    #note-modal-box strong { display: block; margin-bottom: 0.5rem; font-size: 0.92rem; }
+    #note-modal-box strong {
+      display: block;
+      font-family: var(--display);
+      font-style: italic;
+      font-weight: 700;
+      font-variation-settings: 'opsz' 20, 'WONK' 1;
+      font-size: 1.15rem;
+      color: var(--text);
+      margin-bottom: 0.6rem;
+    }
     #note-modal-close {
       position: absolute;
-      top: 0.5rem; right: 0.75rem;
+      top: 0.9rem; right: 1rem;
       background: none;
       border: none;
-      font-size: 1.1rem;
+      font-size: 0.95rem;
+      line-height: 1;
       cursor: pointer;
-      color: #666;
+      color: var(--muted);
+      transition: color 0.1s;
     }
+    #note-modal-close:hover { color: var(--text); }
 
-    /* Responsive: stack on narrow screens */
+    /* ── Mobile ── */
     @media (max-width: 640px) {
-      body { overflow: auto; height: auto; }
-      main { flex-direction: column; overflow: visible; }
-      #blanket-col { flex: none; height: 60vh; border-right: none; border-bottom: 1px solid #ddd; }
+      body    { overflow: auto; height: auto; }
+      main    { flex-direction: column; overflow: visible; padding: 0.75rem; }
+      #blanket-col  { flex: none; height: 60vh; }
       #controls-col { overflow: visible; }
     }
   </style>
@@ -189,27 +367,27 @@
 
   <header>
     <h1>Woolly Weather</h1>
-    <button id="view-more-btn">View more blankets</button>
+    <button id="view-more-btn" class="ghost-pill">View more blankets</button>
   </header>
 
   <main>
 
-    <!-- ── Left column: blanket ── -->
+    <!-- ── Left: blanket ── -->
     <div id="blanket-col">
       <div id="blanket-wrap">
         <p id="blanket-placeholder">Your blanket will appear here.</p>
       </div>
     </div>
 
-    <!-- ── Right column: controls ── -->
+    <!-- ── Right: controls ── -->
     <div id="controls-col">
 
       <div id="instructions">
-        <strong>Instructions</strong>
+        <strong>How it works</strong>
         A temperature blanket gives every day of the year its own colour based on
-        how warm or cold it was. Pick a place and a year — each horizontal row
-        below represents one day, shaded from icy blues through to fiery reds.
-        Data is fetched live from <a href="https://open-meteo.com" target="_blank">Open-Meteo</a>.
+        how warm or cold it was. Pick a place and a year — each horizontal stripe
+        is one day, shaded from icy blues through to fiery reds. Data fetched live
+        from <a href="https://open-meteo.com" target="_blank">Open-Meteo</a>.
       </div>
 
       <div class="field">
@@ -226,18 +404,22 @@
 
       <div class="field">
         <label for="year-select">Year</label>
-        <select id="year-select"></select>
+        <div class="select-wrap">
+          <select id="year-select"></select>
+        </div>
       </div>
 
       <div id="year-notice"></div>
 
-      <button id="generate-btn">Generate</button>
+      <button id="generate-btn">Generate blanket</button>
 
       <div id="status"></div>
 
       <div id="legend"></div>
 
-      <button id="designer-note-btn">Note from the designer</button>
+      <div id="bottom-row">
+        <button id="designer-note-btn" class="ghost-pill">Note from the designer</button>
+      </div>
 
     </div>
   </main>
@@ -295,7 +477,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // Year select — populate and update partial-year notice
+    // Year select
     // -------------------------------------------------------------------------
     const THIS_YEAR = new Date().getFullYear();
 
@@ -305,7 +487,7 @@
         const opt = document.createElement('option');
         opt.value = y;
         opt.textContent = y;
-        if (y === THIS_YEAR - 1) opt.selected = true; // default to last complete year
+        if (y === THIS_YEAR - 1) opt.selected = true;
         sel.appendChild(opt);
       }
       refreshYearNotice();
@@ -315,12 +497,10 @@
       const year   = parseInt(document.getElementById('year-select').value, 10);
       const notice = document.getElementById('year-notice');
       if (year === THIS_YEAR) {
-        const safeEnd   = shiftDays(new Date(), -5);
-        const safeStart = new Date(THIS_YEAR, 0, 1);
-        const dayCount  = Math.round((safeEnd - safeStart) / 86400000) + 1;
+        const safeEnd  = shiftDays(new Date(), -5);
+        const dayCount = Math.round((safeEnd - new Date(THIS_YEAR, 0, 1)) / 86400000) + 1;
         notice.textContent =
-          `${THIS_YEAR} isn't over yet — only the ${dayCount} completed days ` +
-          `(up to ${toISODate(safeEnd)}) will be shown.`;
+          `${THIS_YEAR} isn't over yet — showing the ${dayCount} completed days up to ${toISODate(safeEnd)}.`;
       } else {
         notice.textContent = '';
       }
@@ -329,7 +509,7 @@
     // -------------------------------------------------------------------------
     // Location autocomplete
     // -------------------------------------------------------------------------
-    let pickedLocation = null; // { latitude, longitude, label }
+    let pickedLocation = null;
     let debounceTimer  = null;
     let activeOptIdx   = -1;
 
@@ -338,7 +518,7 @@
     }
 
     async function onPlaceInput() {
-      pickedLocation = null; // typing invalidates any previous pick
+      pickedLocation = null;
       const query = document.getElementById('place-input').value.trim();
       clearTimeout(debounceTimer);
       if (query.length < 2) { closeDropdown(); return; }
@@ -366,7 +546,6 @@
         div.className = 'place-opt';
         div.setAttribute('role', 'option');
         div.textContent = label;
-        // mousedown before blur so the click registers before the input loses focus
         div.addEventListener('mousedown', e => { e.preventDefault(); pickOption(r, label); });
         dd.appendChild(div);
       });
@@ -392,26 +571,22 @@
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         activeOptIdx = Math.min(activeOptIdx + 1, opts.length - 1);
-        syncActive(opts);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         activeOptIdx = Math.max(activeOptIdx - 1, -1);
-        syncActive(opts);
       } else if (e.key === 'Enter' && activeOptIdx >= 0) {
         e.preventDefault();
         opts[activeOptIdx].dispatchEvent(new MouseEvent('mousedown'));
+        return;
       } else if (e.key === 'Escape') {
-        closeDropdown();
+        closeDropdown(); return;
       }
-    }
-
-    function syncActive(opts) {
       opts.forEach((o, i) =>
         o.setAttribute('aria-selected', i === activeOptIdx ? 'true' : 'false'));
     }
 
     // -------------------------------------------------------------------------
-    // Geocoding fallback (when user types freely without picking from dropdown)
+    // Geocoding fallback
     // -------------------------------------------------------------------------
     async function geocode(placeName) {
       const url =
@@ -456,13 +631,12 @@
     }
 
     // -------------------------------------------------------------------------
-    // Sample data fallback — sine-wave seasonal model
+    // Sample data fallback
     // -------------------------------------------------------------------------
     function makeSampleData(startDateStr, endDateStr) {
       const days = [];
-      let cur    = new Date(startDateStr + 'T12:00:00');
-      const end  = new Date(endDateStr   + 'T12:00:00');
-
+      let cur   = new Date(startDateStr + 'T12:00:00');
+      const end = new Date(endDateStr   + 'T12:00:00');
       while (cur <= end) {
         const doy      = Math.round((cur - new Date(cur.getFullYear(), 0, 0)) / 86400000);
         const seasonal = 10 * Math.sin((doy / 365) * 2 * Math.PI - Math.PI / 2);
@@ -472,8 +646,7 @@
           date:   toISODate(cur),
           high:   avg + 4 + Math.random() * 2,
           low:    avg - 4 - Math.random() * 2,
-          avg,
-          sample: true,
+          avg, sample: true,
         });
         cur = shiftDays(cur, 1);
       }
@@ -485,19 +658,17 @@
     // -------------------------------------------------------------------------
     function renderBlanket(days) {
       const wrap = document.getElementById('blanket-wrap');
-      // Remove placeholder text on first render
       const placeholder = document.getElementById('blanket-placeholder');
       if (placeholder) placeholder.remove();
       wrap.innerHTML = '';
 
       const ROW_H = 14;
-      const WIDTH = 800; // viewBox units; CSS scales to 100%
+      const WIDTH = 800;
 
       const NS  = 'http://www.w3.org/2000/svg';
       const svg = document.createElementNS(NS, 'svg');
       svg.setAttribute('viewBox', `0 0 ${WIDTH} ${days.length * ROW_H}`);
       svg.setAttribute('preserveAspectRatio', 'none');
-      // CSS sets width/height:100% — viewBox + preserveAspectRatio:none does the scaling
 
       days.forEach((day, i) => {
         const rect = document.createElementNS(NS, 'rect');
@@ -521,7 +692,7 @@
 
     function renderLegend() {
       const el = document.getElementById('legend');
-      el.innerHTML = '<strong style="width:100%;font-size:0.8rem;">°C colour key:</strong>';
+      el.innerHTML = '';
       for (const band of COLOUR_SCALE) {
         const span = document.createElement('span');
         span.innerHTML =
@@ -531,10 +702,10 @@
     }
 
     // -------------------------------------------------------------------------
-    // Status line
+    // Status
     // -------------------------------------------------------------------------
     function setStatus(msg, isError = false) {
-      const el  = document.getElementById('status');
+      const el = document.getElementById('status');
       el.textContent = msg;
       el.className   = isError ? 'error' : '';
     }
@@ -547,7 +718,7 @@
       const year      = parseInt(document.getElementById('year-select').value, 10);
       const btn       = document.getElementById('generate-btn');
 
-      if (!placeText) { setStatus('Enter a location.', true); return; }
+      if (!placeText) { setStatus('Enter a location first.', true); return; }
 
       btn.disabled = true;
       document.getElementById('blanket-wrap').innerHTML = '';
@@ -558,8 +729,7 @@
         ? toISODate(shiftDays(new Date(), -5))
         : `${year}-12-31`;
 
-      let days;
-      let usedSample = false;
+      let days, usedSample = false;
 
       try {
         let loc;
@@ -569,31 +739,21 @@
           setStatus('Looking up location…');
           loc = await geocode(placeText);
         }
-
-        setStatus(`Found: ${loc.label}. Fetching temperatures for ${year}…`);
+        setStatus(`Fetching ${year} temperatures for ${loc.label}…`);
 
         const daily = await fetchArchive(loc.latitude, loc.longitude, startDate, endDate);
         days = parseDailyData(daily);
-
-        setStatus(`${loc.label} — ${days.length} days (${startDate} → ${endDate})`);
+        setStatus(`${loc.label} · ${days.length} days · ${startDate} → ${endDate}`);
 
       } catch (err) {
         console.warn('Falling back to sample data:', err);
         days       = makeSampleData(startDate, endDate);
         usedSample = true;
-        setStatus(`Could not fetch data (${err.message}). Showing sample data.`, true);
+        setStatus(`Couldn't fetch data — showing sample instead.`, true);
       }
 
       renderBlanket(days);
       renderLegend();
-
-      if (usedSample) {
-        const warn = document.createElement('p');
-        warn.style.cssText = 'color:#c00;font-size:0.8rem;margin-bottom:0.4rem;';
-        warn.textContent   = '⚠ Sample data — not real weather.';
-        document.getElementById('blanket-wrap').prepend(warn);
-      }
-
       btn.disabled = false;
     }
 
@@ -623,7 +783,7 @@
     const placeEl = document.getElementById('place-input');
     placeEl.addEventListener('input',   onPlaceInput);
     placeEl.addEventListener('keydown', onPlaceKeydown);
-    placeEl.addEventListener('blur', () => setTimeout(closeDropdown, 160));
+    placeEl.addEventListener('blur',    () => setTimeout(closeDropdown, 160));
   </script>
 
 </body>
