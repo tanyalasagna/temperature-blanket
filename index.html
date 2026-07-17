@@ -76,8 +76,12 @@
       flex-shrink: 0;
     }
 
-    header h1 { display: flex; align-items: center; line-height: 1; }
-    #ww-logo  { display: block; height: clamp(36px, 4.5vw, 52px); width: auto; overflow: visible; }
+    header h1 {
+      font-family: 'Pacifico', cursive;
+      font-size: clamp(1.4rem, 2.8vw, 2rem);
+      line-height: 1;
+      color: var(--logo-color);
+    }
 
     /* Ghost pill — shared by both header buttons */
     .ghost-pill {
@@ -360,22 +364,7 @@
 <body>
 
   <header>
-    <h1>
-      <svg id="ww-logo" viewBox="0 0 600 68" role="img" aria-label="Woolly Weather">
-        <!-- yarn body: wide warm strand -->
-        <text x="8" y="54"
-          style="font-family:'Pacifico',cursive;font-size:50px;fill:none;
-                 stroke:#c8b898;stroke-width:14;stroke-linejoin:round;stroke-linecap:round;">
-          Woolly Weather
-        </text>
-        <!-- yarn highlight: thin bright line through the centre for 3-D roundness -->
-        <text x="8" y="54"
-          style="font-family:'Pacifico',cursive;font-size:50px;fill:none;
-                 stroke:#f3ede4;stroke-width:3.5;stroke-linejoin:round;stroke-linecap:round;">
-          Woolly Weather
-        </text>
-      </svg>
-    </h1>
+    <h1>Woolly Weather</h1>
     <button id="view-more-btn" class="ghost-pill">View more blankets</button>
   </header>
 
