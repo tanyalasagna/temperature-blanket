@@ -25,6 +25,11 @@
       --r-pill:      999px;
       --display:     'Fraunces', Georgia, serif;
       --sans:        'DM Sans', system-ui, sans-serif;
+      /* ── Blanket tuning knobs ── */
+      --reveal-ms:     1600ms;
+      --wool-displace: 3;
+      --wool-freq-x:   0.6;
+      --wool-freq-y:   0.06;
     }
 
     /* Light theme tokens */
@@ -354,6 +359,19 @@
     }
     #note-modal-close:hover { color: var(--text); }
 
+    /* ── Blanket unroll ── */
+    #blanket-shadow { pointer-events: none; }
+    @media (prefers-reduced-motion: no-preference) {
+      @keyframes blanket-reveal {
+        from { transform: scaleY(0); }
+        to   { transform: scaleY(1); }
+      }
+      #blanket-clip-rect {
+        transform-origin: 0 0;
+        animation: blanket-reveal var(--reveal-ms, 1600ms) cubic-bezier(.22,.61,.36,1) both;
+      }
+    }
+
     /* ── Mobile ── */
     @media (max-width: 640px) {
       body    { overflow: auto; height: auto; }
@@ -662,30 +680,124 @@
       if (placeholder) placeholder.remove();
       wrap.innerHTML = '';
 
-      const ROW_H = 14;
-      const WIDTH = 800;
+      const ROW_H  = 14;
+      const WIDTH  = 800;
+      const HEIGHT = days.length * ROW_H;
+      const NS     = 'http://www.w3.org/2000/svg';
+      const EASE   = '0.22 0.61 0.36 1';
 
-      const NS  = 'http://www.w3.org/2000/svg';
-      const svg = document.createElementNS(NS, 'svg');
-      svg.setAttribute('viewBox', `0 0 ${WIDTH} ${days.length * ROW_H}`);
-      svg.setAttribute('preserveAspectRatio', 'none');
+      // Read tuneable CSS custom properties at render time
+      const cs           = getComputedStyle(document.documentElement);
+      const revealMs     = cs.getPropertyValue('--reveal-ms').trim()       || '1600ms';
+      const woolDisplace = +cs.getPropertyValue('--wool-displace').trim()  || 3;
+      const woolFreqX    = +cs.getPropertyValue('--wool-freq-x').trim()    || 0.6;
+      const woolFreqY    = +cs.getPropertyValue('--wool-freq-y').trim()    || 0.06;
+      const canAnimate   = window.matchMedia('(prefers-reduced-motion: no-preference)').matches;
+
+      const mk = tag => document.createElementNS(NS, tag);
+      const at = (el, obj) => {
+        Object.entries(obj).forEach(([k, v]) => el.setAttribute(k, v));
+        return el;
+      };
+
+      // ── SVG root ──
+      const svg = at(mk('svg'), {
+        id: 'blanket-svg',
+        viewBox: `0 0 ${WIDTH} ${HEIGHT}`,
+        preserveAspectRatio: 'none',
+      });
+
+      // ── defs ──
+      const defs = mk('defs');
+
+      // Wool texture filter — applied once to the group, never per-rect.
+      // baseFrequency is asymmetric: high x, low y because preserveAspectRatio:"none"
+      // squashes the viewBox ~10:1, so equal pixel-space noise needs ~10:1 frequency ratio.
+      const woolFilter = at(mk('filter'), {
+        id: 'wool',
+        x: '-5%', y: '-5%', width: '110%', height: '110%',
+        'color-interpolation-filters': 'linearRGB',
+      });
+      [
+        at(mk('feTurbulence'), {
+          type: 'fractalNoise',
+          baseFrequency: `${woolFreqX} ${woolFreqY}`,
+          numOctaves: '3', seed: '11', result: 'noise',
+        }),
+        at(mk('feDisplacementMap'), {
+          in: 'SourceGraphic', in2: 'noise',
+          scale: String(woolDisplace),
+          xChannelSelector: 'R', yChannelSelector: 'G', result: 'displaced',
+        }),
+        // Light asymmetric blur softens displaced yarn edges without smearing colour bands
+        at(mk('feGaussianBlur'), { in: 'displaced', stdDeviation: '0.4 0.05' }),
+      ].forEach(p => woolFilter.appendChild(p));
+      defs.appendChild(woolFilter);
+
+      // Blur filter for the roll-edge shadow ellipse
+      const shadowFilter = at(mk('filter'), { id: 'shadow-blur' });
+      shadowFilter.appendChild(at(mk('feGaussianBlur'), { stdDeviation: '8 5' }));
+      defs.appendChild(shadowFilter);
+
+      // Clip path — rect is animated via CSS scaleY when motion is allowed;
+      // no animation means no transform, so the rect is full-size and all rows show.
+      const clip = mk('clipPath');
+      clip.setAttribute('id', 'blanket-reveal');
+      clip.appendChild(at(mk('rect'), {
+        id: 'blanket-clip-rect',
+        x: '0', y: '0',
+        width: String(WIDTH), height: String(HEIGHT),
+      }));
+      defs.appendChild(clip);
+
+      svg.appendChild(defs);
+
+      // ── rows group — wool filter + reveal clip applied here, never per-rect ──
+      const rows = at(mk('g'), {
+        id: 'blanket-rows',
+        'clip-path': 'url(#blanket-reveal)',
+        filter: 'url(#wool)',
+      });
 
       days.forEach((day, i) => {
-        const rect = document.createElementNS(NS, 'rect');
-        rect.setAttribute('x',      0);
-        rect.setAttribute('y',      i * ROW_H);
-        rect.setAttribute('width',  WIDTH);
-        rect.setAttribute('height', ROW_H - 1);
-        rect.setAttribute('fill',   tempToHex(day.avg));
-
-        const tip = document.createElementNS(NS, 'title');
+        const rect = at(mk('rect'), {
+          x: '0', y: String(i * ROW_H),
+          width: String(WIDTH), height: String(ROW_H - 1),
+          fill: tempToHex(day.avg),
+        });
+        const tip = mk('title');
         tip.textContent =
           `${day.date}  avg ${day.avg.toFixed(1)} °C` +
           `  (high ${day.high?.toFixed(1) ?? 'n/a'} / low ${day.low?.toFixed(1) ?? 'n/a'})` +
           (day.sample ? '  [sample]' : '');
         rect.appendChild(tip);
-        svg.appendChild(rect);
+        rows.appendChild(rect);
       });
+
+      svg.appendChild(rows);
+
+      // ── roll-edge shadow — only added when animations are running ──
+      // SMIL <animate> on cy keeps the ellipse in SVG user-unit space,
+      // avoiding the CSS translateY px-vs-user-unit mismatch on squashed viewBoxes.
+      if (canAnimate) {
+        const shadow = at(mk('ellipse'), {
+          id: 'blanket-shadow',
+          cx: String(WIDTH / 2), cy: '0',
+          rx: String(WIDTH * 0.48), ry: String(ROW_H * 2.5),
+          fill: 'rgba(0,0,0,0.18)',
+          filter: 'url(#shadow-blur)',
+        });
+        shadow.appendChild(at(mk('animate'), {
+          attributeName: 'cy',
+          from: '0', to: String(HEIGHT),
+          dur: revealMs,
+          calcMode: 'spline',
+          keyTimes: '0;1',
+          keySplines: EASE,
+          fill: 'freeze',
+        }));
+        svg.appendChild(shadow);
+      }
 
       wrap.appendChild(svg);
     }
