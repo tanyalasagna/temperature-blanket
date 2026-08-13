@@ -477,10 +477,10 @@
     const SHADOW_RY_RATIO     = 0.025; // ry as a fraction of total SVG HEIGHT
     const WOOL_TEXTURE_OPACITY = 0.3;        // was 0.55 — lower to preserve colour saturation
     const WOOL_TEXTURE_BLEND   = 'multiply'; // try 'overlay' or 'soft-light'
-    const EDGE_WALK_STEP = 0.8;  // per-row max change in edge offset (SVG units)
-    const EDGE_WALK_MAX  = 3;    // max excursion from the nominal edge (SVG units)
-    const ROW_RX         = 2;    // horizontal corner radius (SVG units)
-    const ROW_RY_RATIO   = 0.35; // vertical corner radius as a fraction of ROW_H
+    const EDGE_WALK_STEP    = 0.8;  // max offset change per keyframe (SVG units)
+    const EDGE_WALK_MAX     = 3;    // max excursion from nominal edge (SVG units)
+    const EDGE_WALK_PERIOD  = 12;   // rows between walk keyframes; offsets interpolated
+    const SILHOUETTE_WOBBLE = 0.015; // organic outline amplitude (fraction of dimension)
     const SHADOW_BLUR_RATIO   = 0.008; // vertical stdDeviation as a fraction of HEIGHT
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) gsap.globalTimeline.timeScale(200);
@@ -804,6 +804,49 @@
       clip.appendChild(clipPathEl);
       defs.appendChild(clip);
 
+      // Silhouette mask — organic outline: rounded corners + gently bowed sides.
+      // Applied to shadowWrap so it shapes blanket and its drop shadow together.
+      (() => {
+        const CRX = WIDTH * 0.02;   // corner radius, horizontal (≈16 SVG units)
+        const CRY = HEIGHT * 0.02;  // corner radius, vertical (compensates ~10:1 squash)
+        const CP  = 0.5523;         // Bézier coefficient for 90° arc approximation
+        let ss = 999;
+        const sr = () => { ss = (ss * 1664525 + 1013904223) >>> 0; return ss / 0xffffffff; };
+        const wobH = () => (sr() - 0.5) * 2 * HEIGHT * SILHOUETTE_WOBBLE;
+        const wobW = () => (sr() - 0.5) * 2 * WIDTH  * SILHOUETTE_WOBBLE;
+        const [x0, y0, x1, y1] = [PAD_X, PAD_Y, PAD_X + WIDTH, PAD_Y + HEIGHT];
+        const eW = WIDTH - 2 * CRX, eH = HEIGHT - 2 * CRY;
+        // Two control-point offsets per edge (perpendicular to edge direction)
+        const t1 = wobH(), t2 = wobH();  // top    — vertical
+        const r1 = wobW(), r2 = wobW();  // right  — horizontal
+        const b1 = wobH(), b2 = wobH();  // bottom — vertical
+        const l1 = wobW(), l2 = wobW();  // left   — horizontal
+        const d = [
+          `M ${x0 + CRX} ${y0}`,
+          // top edge
+          `C ${x0 + CRX + eW / 3} ${y0 + t1}  ${x1 - CRX - eW / 3} ${y0 + t2}  ${x1 - CRX} ${y0}`,
+          // TR corner
+          `C ${x1 - CRX * (1 - CP)} ${y0}  ${x1} ${y0 + CRY * (1 - CP)}  ${x1} ${y0 + CRY}`,
+          // right edge
+          `C ${x1 + r1} ${y0 + CRY + eH / 3}  ${x1 + r2} ${y1 - CRY - eH / 3}  ${x1} ${y1 - CRY}`,
+          // BR corner
+          `C ${x1} ${y1 - CRY * (1 - CP)}  ${x1 - CRX * (1 - CP)} ${y1}  ${x1 - CRX} ${y1}`,
+          // bottom edge
+          `C ${x1 - CRX - eW / 3} ${y1 + b1}  ${x0 + CRX + eW / 3} ${y1 + b2}  ${x0 + CRX} ${y1}`,
+          // BL corner
+          `C ${x0 + CRX * (1 - CP)} ${y1}  ${x0} ${y1 - CRY * (1 - CP)}  ${x0} ${y1 - CRY}`,
+          // left edge
+          `C ${x0 + l1} ${y1 - CRY - eH / 3}  ${x0 + l2} ${y0 + CRY + eH / 3}  ${x0} ${y0 + CRY}`,
+          // TL corner
+          `C ${x0} ${y0 + CRY * (1 - CP)}  ${x0 + CRX * (1 - CP)} ${y0}  ${x0 + CRX} ${y0}`,
+          'Z',
+        ].join(' ');
+        const silClip = mk('clipPath');
+        silClip.setAttribute('id', 'blanket-silhouette');
+        silClip.appendChild(at(mk('path'), { d }));
+        defs.appendChild(silClip);
+      })();
+
       // Wool texture pattern — tiles across the blanket in SVG coordinate space
       const tileW  = totalW / 8;
       const tileH  = totalH / 8;
@@ -831,14 +874,26 @@
         filter: 'url(#wool)',
       });
 
-      // Deterministic random-walk edges — stored so crossfades never shift geometry
-      let edgeL = 0, edgeR = 0, walkSeed = 1;
+      // Deterministic edge walk — keyframes every EDGE_WALK_PERIOD rows, linearly
+      // interpolated so the silhouette drifts over ~17px rather than jittering per pixel
+      let walkSeed = 1;
       const walkRand = () => { walkSeed = (walkSeed * 1664525 + 1013904223) >>> 0; return walkSeed / 0xffffffff; };
       const wclamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-      const leftOffsets  = Array.from({ length: rowDefs.length }, () =>
-        (edgeL = wclamp(edgeL + (walkRand() - 0.5) * 2 * EDGE_WALK_STEP, -EDGE_WALK_MAX, EDGE_WALK_MAX)));
-      const rightOffsets = Array.from({ length: rowDefs.length }, () =>
-        (edgeR = wclamp(edgeR + (walkRand() - 0.5) * 2 * EDGE_WALK_STEP, -EDGE_WALK_MAX, EDGE_WALK_MAX)));
+      const N = rowDefs.length;
+      const numKeys = Math.ceil(N / EDGE_WALK_PERIOD) + 1;
+      let kL = 0, kR = 0;
+      const keysL = Array.from({ length: numKeys }, () =>
+        (kL = wclamp(kL + (walkRand() - 0.5) * 2 * EDGE_WALK_STEP, -EDGE_WALK_MAX, EDGE_WALK_MAX)));
+      const keysR = Array.from({ length: numKeys }, () =>
+        (kR = wclamp(kR + (walkRand() - 0.5) * 2 * EDGE_WALK_STEP, -EDGE_WALK_MAX, EDGE_WALK_MAX)));
+      const leftOffsets = Array.from({ length: N }, (_, i) => {
+        const ki = Math.floor(i / EDGE_WALK_PERIOD);
+        return keysL[ki] + (i % EDGE_WALK_PERIOD) / EDGE_WALK_PERIOD * (keysL[ki + 1] - keysL[ki]);
+      });
+      const rightOffsets = Array.from({ length: N }, (_, i) => {
+        const ki = Math.floor(i / EDGE_WALK_PERIOD);
+        return keysR[ki] + (i % EDGE_WALK_PERIOD) / EDGE_WALK_PERIOD * (keysR[ki + 1] - keysR[ki]);
+      });
 
       rowDefs.forEach((row, i) => {
         const xLeft  = PAD_X + leftOffsets[i];
@@ -847,8 +902,6 @@
           x: String(xLeft), y: String(PAD_Y + i * ROW_H),
           width: String(xRight - xLeft), height: String(ROW_H - 1),
           fill: row.fill,
-          rx: String(ROW_RX),
-          ry: String(ROW_H * ROW_RY_RATIO),
         });
         if (row.tooltip) {
           const tip = mk('title');
@@ -870,7 +923,7 @@
       texRect.style.opacity = String(WOOL_TEXTURE_OPACITY);
       rows.appendChild(texRect);
       // Outer wrapper carries the depth drop shadow; rows group owns the clip + wool filter
-      const shadowWrap = at(mk('g'), { filter: 'url(#blanket-drop-shadow)' });
+      const shadowWrap = at(mk('g'), { filter: 'url(#blanket-drop-shadow)', 'clip-path': 'url(#blanket-silhouette)' });
       shadowWrap.appendChild(rows);
       svg.appendChild(shadowWrap);
 
