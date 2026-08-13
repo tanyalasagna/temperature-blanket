@@ -792,11 +792,11 @@
         x: '-25%', y: '-5%', width: '150%', height: '115%',
       });
       dropShadowFilter.appendChild(at(mk('feDropShadow'), {
-        dx: '0',
+        dx: String(Math.round(WIDTH * 0.015)),
         dy: String((HEIGHT * 0.007).toFixed(1)),
-        stdDeviation: `15 ${(HEIGHT * 0.01).toFixed(1)}`,
+        stdDeviation: `30 ${(HEIGHT * 0.01).toFixed(1)}`,
         'flood-color': '#000',
-        'flood-opacity': '0.32',
+        'flood-opacity': '0.18',
       }));
       defs.appendChild(dropShadowFilter);
 
@@ -933,8 +933,15 @@
       texRect.style.filter = 'grayscale(1)';
       texRect.style.opacity = String(WOOL_TEXTURE_OPACITY);
       rows.appendChild(texRect);
-      // Outer wrapper carries the depth drop shadow; rows group owns the clip + wool filter
-      const shadowWrap = at(mk('g'), { filter: 'url(#blanket-drop-shadow)', 'clip-path': 'url(#blanket-silhouette)' });
+      // Static shadow rect sits behind the blanket; does not follow the ripple
+      const shadowRect = at(mk('rect'), {
+        id: 'blanket-shadow-rect',
+        x: String(PAD_X), y: String(PAD_Y), width: String(WIDTH), height: String(HEIGHT),
+        fill: '#000', filter: 'url(#blanket-drop-shadow)',
+      });
+      svg.appendChild(shadowRect);
+      // Silhouette clip wraps rows; no drop shadow filter on this group
+      const shadowWrap = at(mk('g'), { 'clip-path': 'url(#blanket-silhouette)' });
       shadowWrap.appendChild(rows);
       svg.appendChild(shadowWrap);
 
@@ -1068,8 +1075,7 @@
             onFrame(state, mean) {
               const silPath = document.querySelector('#blanket-silhouette path');
               if (silPath) silPath.setAttribute('transform', `translate(${mean.toFixed(2)}, 0)`);
-              const fds = document.querySelector('#blanket-drop-shadow feDropShadow');
-              if (fds) fds.setAttribute('dx', (mean * 0.3).toFixed(2));
+              gsap.set('#blanket-shadow-rect', { x: (mean * 0.2).toFixed(2) });
             },
             onRowUpdate(rect, i, offset, waveValue) {
               if (waveValue > 0) rect.setAttribute('data-base-fill', rowData[i].fill);
@@ -1079,8 +1085,7 @@
             },
             onComplete() {
               document.querySelector('#blanket-silhouette path')?.removeAttribute('transform');
-              const _fds = document.querySelector('#blanket-drop-shadow feDropShadow');
-              if (_fds) _fds.setAttribute('dx', '0');
+              gsap.set('#blanket-shadow-rect', { x: 0 });
             },
           });
         }
@@ -1093,8 +1098,7 @@
             onFrame(state, mean) {
               const silPath = document.querySelector('#blanket-silhouette path');
               if (silPath) silPath.setAttribute('transform', `translate(${mean.toFixed(2)}, 0)`);
-              const fds = document.querySelector('#blanket-drop-shadow feDropShadow');
-              if (fds) fds.setAttribute('dx', (mean * 0.3).toFixed(2));
+              gsap.set('#blanket-shadow-rect', { x: (mean * 0.2).toFixed(2) });
             },
             onRowUpdate(rect, i, offset) {
               rect.setAttribute('x', String(parseFloat(rect.getAttribute('data-base-x')) + offset));
@@ -1103,8 +1107,7 @@
             },
             onComplete() {
               document.querySelector('#blanket-silhouette path')?.removeAttribute('transform');
-              const _fds = document.querySelector('#blanket-drop-shadow feDropShadow');
-              if (_fds) _fds.setAttribute('dx', '0');
+              gsap.set('#blanket-shadow-rect', { x: 0 });
             },
           });
         }
@@ -1152,8 +1155,7 @@
         if (bf) r.setAttribute('fill', bf);
       });
       document.querySelector('#blanket-silhouette path')?.removeAttribute('transform');
-      const _genFds = document.querySelector('#blanket-drop-shadow feDropShadow');
-      if (_genFds) _genFds.setAttribute('dx', '0');
+      gsap.set('#blanket-shadow-rect', { x: 0 });
       const placeText = document.getElementById('place-input').value.trim();
       const year      = parseInt(document.getElementById('year-select').value, 10);
       const btn       = document.getElementById('generate-btn');
@@ -1214,8 +1216,7 @@
         onFrame(state, mean) {
           const silPath = document.querySelector('#blanket-silhouette path');
           if (silPath) silPath.setAttribute('transform', `translate(${mean.toFixed(2)}, 0)`);
-          const fds = document.querySelector('#blanket-drop-shadow feDropShadow');
-          if (fds) fds.setAttribute('dx', (mean * 0.3).toFixed(2));
+          gsap.set('#blanket-shadow-rect', { x: (mean * 0.2).toFixed(2) });
         },
         onRowUpdate(rect, i, offset) {
           rect.setAttribute('x', String(parseFloat(rect.getAttribute('data-base-x')) + offset));
@@ -1224,8 +1225,7 @@
         },
         onComplete() {
           document.querySelector('#blanket-silhouette path')?.removeAttribute('transform');
-          const _fds = document.querySelector('#blanket-drop-shadow feDropShadow');
-          if (_fds) _fds.setAttribute('dx', '0');
+          gsap.set('#blanket-shadow-rect', { x: 0 });
         },
       });
     }
