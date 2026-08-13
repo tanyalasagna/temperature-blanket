@@ -707,7 +707,7 @@
     let blanketTl = null; // module-scope; killed before each new render
     let colourTl  = null; // module-scope; killed before each new colour tween
 
-    function renderBlanket(rowDefs) {
+    function renderBlanket(rowDefs, animate = true) {
       if (blanketTl) { blanketTl.kill(); blanketTl = null; }
       if (colourTl)  { colourTl.kill();  colourTl  = null; }
 
@@ -941,7 +941,7 @@
       wrap.appendChild(svg);
 
 
-      if (prefersReducedMotion) return;
+      if (!animate || prefersReducedMotion) return;
 
       gsap.set('#blanket-rows', { transformOrigin: 'top' });
 
@@ -1112,7 +1112,7 @@
     // Wire up
     // -------------------------------------------------------------------------
     buildYearSelect();
-    renderBlanket(makeIdleRows());
+    renderBlanket(makeIdleRows(), false);
 
     document.getElementById('generate-btn').addEventListener('click', generate);
     document.getElementById('year-select').addEventListener('change', refreshYearNotice);
