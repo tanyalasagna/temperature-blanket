@@ -807,8 +807,8 @@
       // Silhouette mask — organic outline: rounded corners + gently bowed sides.
       // Applied to shadowWrap so it shapes blanket and its drop shadow together.
       (() => {
-        const CRX = WIDTH * 0.02;   // corner radius, horizontal (≈16 SVG units)
-        const CRY = HEIGHT * 0.02;  // corner radius, vertical (compensates ~10:1 squash)
+        const CRX = WIDTH * 0.01;   // corner radius, horizontal (≈8 SVG units)
+        const CRY = HEIGHT * 0.01;  // corner radius, vertical (compensates ~10:1 squash)
         const CP  = 0.5523;         // Bézier coefficient for 90° arc approximation
         let ss = 999;
         const sr = () => { ss = (ss * 1664525 + 1013904223) >>> 0; return ss / 0xffffffff; };
