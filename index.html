@@ -481,6 +481,9 @@
     const EDGE_WALK_MAX     = 3;    // max excursion from nominal edge (SVG units)
     const EDGE_WALK_PERIOD  = 12;   // rows between walk keyframes; offsets interpolated
     const SILHOUETTE_WOBBLE = 0.015; // organic outline amplitude (fraction of dimension)
+    const RIPPLE_FREQ      = 0.08;   // wave cycles per row index
+    const RIPPLE_AMPLITUDE = 14;     // peak horizontal offset (SVG user units)
+    const RIPPLE_SECS      = 2.2;    // ripple animation duration in seconds
     const SHADOW_BLUR_RATIO   = 0.008; // vertical stdDeviation as a fraction of HEIGHT
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) gsap.globalTimeline.timeScale(200);
@@ -706,6 +709,7 @@
     // -------------------------------------------------------------------------
     let blanketTl = null; // module-scope; killed before each new render
     let colourTl  = null; // module-scope; killed before each new colour tween
+    let rippleTl  = null; // module-scope; killed before each new ripple
 
     function renderBlanket(rowDefs, animate = true) {
       if (blanketTl) { blanketTl.kill(); blanketTl = null; }
@@ -903,6 +907,7 @@
           width: String(xRight - xLeft), height: String(ROW_H - 1),
           fill: row.fill,
         });
+        rect.setAttribute('data-base-x', String(xLeft));
         if (row.tooltip) {
           const tip = mk('title');
           tip.textContent = row.tooltip;
@@ -990,6 +995,27 @@
 
     }
 
+    function rippleRows({ onRowUpdate, duration, onComplete } = {}) {
+      if (rippleTl) { rippleTl.kill(); rippleTl = null; }
+      const dayRects = Array.from(document.querySelectorAll('#blanket-rows rect[data-base-x]'));
+      if (!dayRects.length) return null;
+      const N = dayRects.length;
+      const state = { phase: 0, amp: 1 };
+      rippleTl = gsap.timeline({
+        onUpdate() {
+          dayRects.forEach((rect, i) => {
+            const waveValue = Math.max(0, Math.min(1, state.phase / (Math.PI * 4) - i / N));
+            const offset    = Math.sin(i * RIPPLE_FREQ - state.phase) * state.amp * RIPPLE_AMPLITUDE;
+            onRowUpdate(rect, i, offset, waveValue);
+          });
+        },
+        onComplete,
+      });
+      rippleTl.to(state, { phase: Math.PI * 4, duration, ease: 'none' }, 0);
+      rippleTl.to(state, { amp: 0, duration, ease: 'power2.out' }, 0);
+      return rippleTl;
+    }
+
     function colourBlanket(days) {
       if (colourTl) { colourTl.kill(); colourTl = null; }
 
@@ -1001,9 +1027,10 @@
           (day.sample ? '  [sample]' : ''),
       }));
 
-      const dayRects = Array.from(document.querySelectorAll('#blanket-rows rect[rx]'));
+      const dayRects = Array.from(document.querySelectorAll('#blanket-rows rect[data-base-x]'));
 
       if (dayRects.length === days.length) {
+        // Attach/update tooltips before the ripple starts
         dayRects.forEach((rect, i) => {
           let tip = rect.querySelector('title');
           if (!tip) {
@@ -1014,17 +1041,27 @@
         });
 
         if (prefersReducedMotion) {
-          dayRects.forEach((rect, i) => gsap.set(rect, { attr: { fill: rowData[i].fill } }));
+          dayRects.forEach((rect, i) => rect.setAttribute('fill', rowData[i].fill));
         } else {
-          colourTl = gsap.to(dayRects, {
-            attr: { fill: (i) => rowData[i].fill },
-            stagger: 0.002,
-            duration: 0.5,
-            ease: 'power1.inOut',
+          rippleRows({
+            duration: RIPPLE_SECS,
+            onRowUpdate(rect, i, offset, waveValue) {
+              rect.setAttribute('x', String(parseFloat(rect.getAttribute('data-base-x')) + offset));
+              if (waveValue > 0) rect.setAttribute('fill', rowData[i].fill);
+            },
           });
         }
       } else {
-        renderBlanket(rowData);
+        // Row count changed — rebuild SVG then ripple without colour sweep
+        renderBlanket(rowData, false);
+        if (!prefersReducedMotion) {
+          rippleRows({
+            duration: RIPPLE_SECS,
+            onRowUpdate(rect, i, offset) {
+              rect.setAttribute('x', String(parseFloat(rect.getAttribute('data-base-x')) + offset));
+            },
+          });
+        }
       }
     }
 
@@ -1061,6 +1098,9 @@
     async function generate() {
       if (blanketTl) { blanketTl.kill(); blanketTl = null; }
       if (colourTl)  { colourTl.kill();  colourTl  = null; }
+      if (rippleTl)  { rippleTl.kill();  rippleTl  = null; }
+      document.querySelectorAll('#blanket-rows rect[data-base-x]').forEach(r =>
+        r.setAttribute('x', r.getAttribute('data-base-x')));
       const placeText = document.getElementById('place-input').value.trim();
       const year      = parseInt(document.getElementById('year-select').value, 10);
       const btn       = document.getElementById('generate-btn');
@@ -1113,6 +1153,16 @@
     // -------------------------------------------------------------------------
     buildYearSelect();
     renderBlanket(makeIdleRows(), false);
+    if (!prefersReducedMotion) {
+      gsap.set('#blanket-rows', { opacity: 0 });
+      gsap.to('#blanket-rows', { opacity: 1, duration: 0.5, ease: 'power1.out' });
+      rippleRows({
+        duration: RIPPLE_SECS,
+        onRowUpdate(rect, i, offset) {
+          rect.setAttribute('x', String(parseFloat(rect.getAttribute('data-base-x')) + offset));
+        },
+      });
+    }
 
     document.getElementById('generate-btn').addEventListener('click', generate);
     document.getElementById('year-select').addEventListener('change', refreshYearNotice);
