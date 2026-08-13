@@ -477,6 +477,10 @@
     const SHADOW_RY_RATIO     = 0.025; // ry as a fraction of total SVG HEIGHT
     const WOOL_TEXTURE_OPACITY = 0.3;        // was 0.55 — lower to preserve colour saturation
     const WOOL_TEXTURE_BLEND   = 'multiply'; // try 'overlay' or 'soft-light'
+    const EDGE_WALK_STEP = 0.8;  // per-row max change in edge offset (SVG units)
+    const EDGE_WALK_MAX  = 3;    // max excursion from the nominal edge (SVG units)
+    const ROW_RX         = 2;    // horizontal corner radius (SVG units)
+    const ROW_RY_RATIO   = 0.35; // vertical corner radius as a fraction of ROW_H
     const SHADOW_BLUR_RATIO   = 0.008; // vertical stdDeviation as a fraction of HEIGHT
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) gsap.globalTimeline.timeScale(200);
@@ -827,18 +831,24 @@
         filter: 'url(#wool)',
       });
 
-      // Deterministic per-row edge jitter — stable across re-renders of the same data
-      const EDGE_JITTER = 4; // max per-side variation in SVG user units
-      const jit = i => { const s = Math.sin(i * 127.1 + 311.7); return s - Math.floor(s); };
+      // Deterministic random-walk edges — stored so crossfades never shift geometry
+      let edgeL = 0, edgeR = 0, walkSeed = 1;
+      const walkRand = () => { walkSeed = (walkSeed * 1664525 + 1013904223) >>> 0; return walkSeed / 0xffffffff; };
+      const wclamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      const leftOffsets  = Array.from({ length: rowDefs.length }, () =>
+        (edgeL = wclamp(edgeL + (walkRand() - 0.5) * 2 * EDGE_WALK_STEP, -EDGE_WALK_MAX, EDGE_WALK_MAX)));
+      const rightOffsets = Array.from({ length: rowDefs.length }, () =>
+        (edgeR = wclamp(edgeR + (walkRand() - 0.5) * 2 * EDGE_WALK_STEP, -EDGE_WALK_MAX, EDGE_WALK_MAX)));
 
       rowDefs.forEach((row, i) => {
-        const xLeft  = PAD_X + (jit(i * 2)     - 0.5) * EDGE_JITTER;
-        const xRight = PAD_X + WIDTH + (jit(i * 2 + 1) - 0.5) * EDGE_JITTER;
+        const xLeft  = PAD_X + leftOffsets[i];
+        const xRight = PAD_X + WIDTH + rightOffsets[i];
         const rect = at(mk('rect'), {
           x: String(xLeft), y: String(PAD_Y + i * ROW_H),
           width: String(xRight - xLeft), height: String(ROW_H - 1),
           fill: row.fill,
-          rx: '1.5',
+          rx: String(ROW_RX),
+          ry: String(ROW_H * ROW_RY_RATIO),
         });
         if (row.tooltip) {
           const tip = mk('title');
