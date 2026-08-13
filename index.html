@@ -757,7 +757,7 @@
       // squashes the viewBox ~10:1, so equal pixel-space noise needs ~10:1 frequency ratio.
       const woolFilter = at(mk('filter'), {
         id: 'wool',
-        x: '-8%', y: '-5%', width: '116%', height: '110%',
+        x: '-25%', y: '-5%', width: '150%', height: '110%',
         'color-interpolation-filters': 'linearRGB',
       });
       [
@@ -789,7 +789,7 @@
       // Soft depth drop shadow applied to the blanket group so it sits on the card
       const dropShadowFilter = at(mk('filter'), {
         id: 'blanket-drop-shadow',
-        x: '-15%', y: '-5%', width: '130%', height: '115%',
+        x: '-25%', y: '-5%', width: '150%', height: '115%',
       });
       dropShadowFilter.appendChild(at(mk('feDropShadow'), {
         dx: '0',
