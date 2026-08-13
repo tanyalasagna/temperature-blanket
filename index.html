@@ -791,12 +791,8 @@
         id: 'blanket-drop-shadow',
         x: '-25%', y: '-5%', width: '150%', height: '115%',
       });
-      dropShadowFilter.appendChild(at(mk('feDropShadow'), {
-        dx: String(Math.round(WIDTH * 0.015)),
-        dy: String((HEIGHT * 0.007).toFixed(1)),
+      dropShadowFilter.appendChild(at(mk('feGaussianBlur'), {
         stdDeviation: `30 ${(HEIGHT * 0.01).toFixed(1)}`,
-        'flood-color': '#000',
-        'flood-opacity': '0.18',
       }));
       defs.appendChild(dropShadowFilter);
 
@@ -933,11 +929,15 @@
       texRect.style.filter = 'grayscale(1)';
       texRect.style.opacity = String(WOOL_TEXTURE_OPACITY);
       rows.appendChild(texRect);
-      // Static shadow rect sits behind the blanket; does not follow the ripple
+      // Static shadow rect: offset, semi-transparent, clipped to silhouette, blurred
       const shadowRect = at(mk('rect'), {
         id: 'blanket-shadow-rect',
-        x: String(PAD_X), y: String(PAD_Y), width: String(WIDTH), height: String(HEIGHT),
-        fill: '#000', filter: 'url(#blanket-drop-shadow)',
+        x: String(PAD_X + Math.round(WIDTH * 0.015)),
+        y: String(PAD_Y + Math.round(HEIGHT * 0.007)),
+        width: String(WIDTH), height: String(HEIGHT),
+        fill: '#000', opacity: '0.25',
+        'clip-path': 'url(#blanket-silhouette)',
+        filter: 'url(#blanket-drop-shadow)',
       });
       svg.appendChild(shadowRect);
       // Silhouette clip wraps rows; no drop shadow filter on this group
