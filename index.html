@@ -918,13 +918,14 @@
         rows.appendChild(rect);
       });
 
-      // Wool texture rect — oversized so it covers rows wherever ripple displaces them
-      const TEX_SLOP = RIPPLE_AMPLITUDE + EDGE_WALK_MAX;
+      // Wool texture rect — tracks mean ripple offset so it follows the fabric's centre of mass
       const texRect = at(mk('rect'), {
-        x: String(PAD_X - TEX_SLOP), y: String(PAD_Y - TEX_SLOP),
-        width: String(WIDTH + TEX_SLOP * 2), height: String(HEIGHT + TEX_SLOP * 2),
+        id: 'blanket-tex-rect',
+        x: String(PAD_X - EDGE_WALK_MAX), y: String(PAD_Y),
+        width: String(WIDTH + EDGE_WALK_MAX * 2), height: String(HEIGHT),
         fill: 'url(#wool-texture)',
         'pointer-events': 'none',
+        'data-base-x': String(PAD_X - EDGE_WALK_MAX),
       });
       texRect.style.mixBlendMode = WOOL_TEXTURE_BLEND;
       texRect.style.filter = 'grayscale(1)';
@@ -1035,6 +1036,9 @@
             const waveValue = Math.max(0, Math.min(1, state.phase / (Math.PI * 4) - i / N));
             onRowUpdate(rect, i, offsets[i], waveValue);
           });
+          const texEl = document.getElementById('blanket-tex-rect');
+          if (texEl) texEl.setAttribute('x',
+            String(parseFloat(texEl.getAttribute('data-base-x')) + mean));
           if (onFrame) onFrame(state, mean);
         },
         onComplete,
@@ -1157,6 +1161,8 @@
       });
       document.querySelector('#blanket-silhouette path')?.removeAttribute('transform');
       gsap.set('#blanket-shadow-rect', { x: 0 });
+      const texElReset = document.getElementById('blanket-tex-rect');
+      if (texElReset) texElReset.setAttribute('x', texElReset.getAttribute('data-base-x'));
       const placeText = document.getElementById('place-input').value.trim();
       const year      = parseInt(document.getElementById('year-select').value, 10);
       const btn       = document.getElementById('generate-btn');
