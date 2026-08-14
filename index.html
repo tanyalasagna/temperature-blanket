@@ -918,10 +918,11 @@
         rows.appendChild(rect);
       });
 
-      // Wool texture rect — overlaid inside the reveal clip; moves with the group for free
+      // Wool texture rect — oversized so it covers rows wherever ripple displaces them
+      const TEX_SLOP = RIPPLE_AMPLITUDE + EDGE_WALK_MAX;
       const texRect = at(mk('rect'), {
-        x: String(PAD_X), y: String(PAD_Y),
-        width: String(WIDTH), height: String(HEIGHT),
+        x: String(PAD_X - TEX_SLOP), y: String(PAD_Y - TEX_SLOP),
+        width: String(WIDTH + TEX_SLOP * 2), height: String(HEIGHT + TEX_SLOP * 2),
         fill: 'url(#wool-texture)',
         'pointer-events': 'none',
       });
