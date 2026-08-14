@@ -476,7 +476,7 @@
     const DROOP_RATIO         = 0.03;  // peak droop of the reveal curve as a fraction of HEIGHT
     const SHADOW_RY_RATIO     = 0.025; // ry as a fraction of total SVG HEIGHT
     const WOOL_TEXTURE_OPACITY = 0.3;        // was 0.55 — lower to preserve colour saturation
-    const WOOL_TEXTURE_BLEND   = 'multiply'; // try 'overlay' or 'soft-light'
+    const WOOL_TEXTURE_BLEND   = 'overlay'; // try 'overlay' or 'soft-light'
     const EDGE_WALK_STEP    = 0.8;  // max offset change per keyframe (SVG units)
     const EDGE_WALK_MAX     = 3;    // max excursion from nominal edge (SVG units)
     const EDGE_WALK_PERIOD  = 12;   // rows between walk keyframes; offsets interpolated
@@ -902,13 +902,15 @@
       rowDefs.forEach((row, i) => {
         const xLeft  = PAD_X + leftOffsets[i];
         const xRight = PAD_X + WIDTH + rightOffsets[i];
+        const w = xRight - xLeft;
+        const yTop = PAD_Y + i * ROW_H;
         const rect = at(mk('rect'), {
-          x: String(xLeft), y: String(PAD_Y + i * ROW_H),
-          width: String(xRight - xLeft), height: String(ROW_H - 1),
+          x: String(xLeft), y: String(yTop),
+          width: String(w), height: String(ROW_H - 1),
           fill: row.fill,
         });
         rect.setAttribute('data-base-x',    String(xLeft));
-        rect.setAttribute('data-base-y',    String(PAD_Y + i * ROW_H));
+        rect.setAttribute('data-base-y',    String(yTop));
         rect.setAttribute('data-base-fill', row.fill);
         if (row.tooltip) {
           const tip = mk('title');
@@ -916,21 +918,18 @@
           rect.appendChild(tip);
         }
         rows.appendChild(rect);
+        // Paired texture rect — identical geometry, no data-base-x so ripple skips it
+        const tRect = at(mk('rect'), {
+          x: String(xLeft), y: String(yTop),
+          width: String(w), height: String(ROW_H - 1),
+          fill: 'url(#wool-texture)', 'pointer-events': 'none',
+        });
+        tRect.style.mixBlendMode = WOOL_TEXTURE_BLEND;
+        tRect.style.filter = 'grayscale(1)';
+        tRect.style.opacity = String(WOOL_TEXTURE_OPACITY);
+        rows.appendChild(tRect);
       });
 
-      // Wool texture rect — tracks mean ripple offset so it follows the fabric's centre of mass
-      const texRect = at(mk('rect'), {
-        id: 'blanket-tex-rect',
-        x: String(PAD_X - EDGE_WALK_MAX), y: String(PAD_Y),
-        width: String(WIDTH + EDGE_WALK_MAX * 2), height: String(HEIGHT),
-        fill: 'url(#wool-texture)',
-        'pointer-events': 'none',
-        'data-base-x': String(PAD_X - EDGE_WALK_MAX),
-      });
-      texRect.style.mixBlendMode = WOOL_TEXTURE_BLEND;
-      texRect.style.filter = 'grayscale(1)';
-      texRect.style.opacity = String(WOOL_TEXTURE_OPACITY);
-      rows.appendChild(texRect);
       // Static shadow rect: offset, semi-transparent, clipped to silhouette, blurred
       const shadowRect = at(mk('rect'), {
         id: 'blanket-shadow-rect',
@@ -1025,6 +1024,7 @@
       if (rippleTl) { rippleTl.kill(); rippleTl = null; }
       const dayRects = Array.from(document.querySelectorAll('#blanket-rows rect[data-base-x]'));
       if (!dayRects.length) return null;
+      const texRects = dayRects.map(r => r.nextElementSibling);
       const N = dayRects.length;
       const state = { phase: 0, amp: 1 };
       rippleTl = gsap.timeline({
@@ -1035,10 +1035,11 @@
           dayRects.forEach((rect, i) => {
             const waveValue = Math.max(0, Math.min(1, state.phase / (Math.PI * 4) - i / N));
             onRowUpdate(rect, i, offsets[i], waveValue);
+            if (texRects[i]) {
+              texRects[i].setAttribute('x', rect.getAttribute('x'));
+              texRects[i].setAttribute('y', rect.getAttribute('y'));
+            }
           });
-          const texEl = document.getElementById('blanket-tex-rect');
-          if (texEl) texEl.setAttribute('x',
-            String(parseFloat(texEl.getAttribute('data-base-x')) + mean));
           if (onFrame) onFrame(state, mean);
         },
         onComplete,
@@ -1158,11 +1159,14 @@
         r.setAttribute('y',    r.getAttribute('data-base-y'));
         const bf = r.getAttribute('data-base-fill');
         if (bf) r.setAttribute('fill', bf);
+        const tRect = r.nextElementSibling;
+        if (tRect) {
+          tRect.setAttribute('x', r.getAttribute('data-base-x'));
+          tRect.setAttribute('y', r.getAttribute('data-base-y'));
+        }
       });
       document.querySelector('#blanket-silhouette path')?.removeAttribute('transform');
       gsap.set('#blanket-shadow-rect', { x: 0 });
-      const texElReset = document.getElementById('blanket-tex-rect');
-      if (texElReset) texElReset.setAttribute('x', texElReset.getAttribute('data-base-x'));
       const placeText = document.getElementById('place-input').value.trim();
       const year      = parseInt(document.getElementById('year-select').value, 10);
       const btn       = document.getElementById('generate-btn');
