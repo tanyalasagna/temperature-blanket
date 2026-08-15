@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Woolly Weather — 3D Experiment</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #12100e; overflow: hidden; }
+    canvas { display: block; }
+    #info {
+      position: fixed;
+      bottom: 1.25rem;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,245,232,0.45);
+      font: 13px/1 system-ui, sans-serif;
+      letter-spacing: 0.03em;
+      pointer-events: none;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">drag to orbit · scroll to zoom · right-drag to pan</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three":          "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+      "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ── Colour scale (mirrors the SVG version) ──────────────────────────────
+    const COLOUR_BANDS = [
+      { max: -15, hex: '#c8d8e8' },
+      { max:  -5, hex: '#82b4d2' },
+      { max:   5, hex: '#5c9ab5' },
+      { max:  10, hex: '#7ab87a' },
+      { max:  15, hex: '#b5d67c' },
+      { max:  20, hex: '#f5d76e' },
+      { max:  25, hex: '#f4a03c' },
+      { max:  30, hex: '#e05c3a' },
+      { max:  Infinity, hex: '#b52020' },
+    ];
+
+    function tempToHex(c) {
+      return (COLOUR_BANDS.find(b => c < b.max) ?? COLOUR_BANDS.at(-1)).hex;
+    }
+
+    // ── Simulated northern-hemisphere year ──────────────────────────────────
+    // Sinusoidal seasonal baseline (-10 °C Jan, +10 °C Jul) + bounded noise
+    function simulateYear() {
+      // Seed a simple LCG so the pattern is reproducible on reload
+      let lcg = 0xDEADBEEF;
+      const rand = () => { lcg = (lcg * 1664525 + 1013904223) >>> 0; return lcg / 0xFFFFFFFF; };
+
+      return Array.from({ length: 365 }, (_, d) => {
+        const seasonal = -10 * Math.cos(2 * Math.PI * d / 365);
+        const noise    = (rand() * 2 - 1) * 4;
+        return tempToHex(12 + seasonal + noise);   // centred ~12 °C
+      });
+    }
+
+    const dayColors = simulateYear();   // index 0 = 1 Jan, 364 = 31 Dec
+
+    // ── Canvas texture (2 × 365, NearestFilter for crisp bands) ────────────
+    // Three.js CanvasTexture flips Y by default, so canvas row 0 → bottom of
+    // the plane (UV y=0). Fill in reverse so Jan sits at the top of the mesh.
+    function buildTexture(colors) {
+      const n   = colors.length;
+      const cvs = Object.assign(document.createElement('canvas'), { width: 2, height: n });
+      const ctx = cvs.getContext('2d');
+      for (let i = 0; i < n; i++) {
+        ctx.fillStyle = colors[n - 1 - i];   // reverse: day 364 at canvas row 0 → mesh bottom
+        ctx.fillRect(0, i, 2, 1);
+      }
+      const tex = new THREE.CanvasTexture(cvs);
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      return tex;
+    }
+
+    // ── Renderer ────────────────────────────────────────────────────────────
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+    renderer.toneMapping       = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    document.body.appendChild(renderer.domElement);
+
+    // ── Scene ───────────────────────────────────────────────────────────────
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x12100e);
+    scene.fog = new THREE.Fog(0x12100e, 12, 22);
+
+    // ── Camera ──────────────────────────────────────────────────────────────
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.01, 50);
+    camera.position.set(0, 0.4, 5.5);
+
+    // ── Controls ────────────────────────────────────────────────────────────
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping  = true;
+    controls.dampingFactor  = 0.055;
+    controls.minDistance    = 1.5;
+    controls.maxDistance    = 14;
+    controls.maxPolarAngle  = Math.PI * 0.8;
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+    // ── Lighting ────────────────────────────────────────────────────────────
+    // Warm ambient — lifts shadows without washing out the colours
+    const ambient = new THREE.AmbientLight(0xfff5e8, 0.55);
+    scene.add(ambient);
+
+    // Warm key light from upper-right — primary shadow caster
+    const key = new THREE.DirectionalLight(0xffe8c8, 2.2);
+    key.position.set(2.5, 4, 3.5);
+    key.castShadow              = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.near      = 0.5;
+    key.shadow.camera.far       = 20;
+    key.shadow.camera.left      = -4;
+    key.shadow.camera.right     = 4;
+    key.shadow.camera.top       = 6;
+    key.shadow.camera.bottom    = -6;
+    key.shadow.bias             = -0.0005;
+    scene.add(key);
+
+    // Cool fill from lower-left — gives the recessed areas a blue tint
+    const fill = new THREE.DirectionalLight(0xc8d8ff, 0.45);
+    fill.position.set(-3, -2, 2);
+    scene.add(fill);
+
+    // ── Blanket geometry ────────────────────────────────────────────────────
+    // 8 width segments allow the crosswise bow to resolve smoothly.
+    // 365 height segments give one quad per day.
+    const W = 1.85;
+    const H = 3.4;
+    const geo = new THREE.PlaneGeometry(W, H, 8, 365);
+
+    // Displace vertices in Z: a gentle parabolic sag along Y (lengthwise drape)
+    // plus a shallow crosswise bow — both make the directional light reveal depth.
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x  = pos.getX(i);
+      const y  = pos.getY(i);
+      const ny = y / (H * 0.5);          // normalised –1 … +1
+      const nx = x / (W * 0.5);
+
+      const sag = -0.14 * (1 - ny * ny); // parabolic lengthwise sag (deepest at centre)
+      const bow = -0.05 * (1 - nx * nx); // shallow crosswise bow
+
+      pos.setZ(i, sag + bow);
+    }
+    geo.computeVertexNormals();
+
+    // ── Material ────────────────────────────────────────────────────────────
+    const mat = new THREE.MeshStandardMaterial({
+      map:       buildTexture(dayColors),
+      roughness: 0.94,   // very matte — wool-like, no specular hotspot
+      metalness: 0.0,
+      side:      THREE.DoubleSide,
+    });
+
+    const blanket = new THREE.Mesh(geo, mat);
+    blanket.castShadow    = true;
+    blanket.receiveShadow = true;
+    scene.add(blanket);
+
+    // ── Render loop ─────────────────────────────────────────────────────────
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // ── Resize ──────────────────────────────────────────────────────────────
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
