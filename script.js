@@ -50,10 +50,10 @@
     const BLOOM_SEEDS      = 4;
     const BLOOM_FADE_SECS  = 0.45;  // per-row crossfade duration
     const BLOOM_JITTER     = 0.12;  // arrival-time noise, fraction of BLOOM_SECS
-    const BREATHE_AMPLITUDE = 1.5;   // SVG units — subtle idle displacement
+    const BREATHE_AMPLITUDE = 3.5;   // SVG units — deeper idle displacement
     const BREATHE_FREQ      = 0.012; // broad wave: one slow crest down the blanket
-    const BREATHE_SECS      = 9;     // seconds per full cycle
-    const BREATHE_SHADE     = 0.04;  // brightness swing ±4% — does most of the work
+    const BREATHE_SECS      = 14;    // seconds per full cycle
+    const BREATHE_SHADE     = 0.09;  // brightness swing ±9% — pronounced but rhythmic
     const SHADOW_BLUR_RATIO   = 0.008; // vertical stdDeviation as a fraction of HEIGHT
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) gsap.globalTimeline.timeScale(200);
@@ -638,8 +638,14 @@
         });
       });
       const state = { phase: 0 };
+      let breatheBlend = 0;
       let frame = 0;
       breatheTl = gsap.timeline({ repeat: -1 });
+      // Swell blend from 0→1 over 2.5s so breathe eases into existence
+      gsap.to({ v: 0 }, {
+        v: 1, duration: 2.5, ease: 'power2.inOut',
+        onUpdate() { breatheBlend = this.targets()[0].v; },
+      });
       breatheTl.to(state, {
         phase: Math.PI * 2,
         duration: BREATHE_SECS,
@@ -647,11 +653,12 @@
         onUpdate() {
           // Throttle to ~15fps — skip 3 of every 4 frames
           if (++frame % 4 !== 0) return;
+          const blend = breatheBlend;
           // Read pass: compute all sin values before any DOM writes
           const sinVals = new Float32Array(N);
           let sinSum = 0;
           for (let i = 0; i < N; i++) {
-            sinVals[i] = Math.sin(i * BREATHE_FREQ - state.phase);
+            sinVals[i] = Math.sin(i * BREATHE_FREQ - state.phase) * blend;
             sinSum += sinVals[i];
           }
           // Write pass: batch all DOM mutations
@@ -680,6 +687,14 @@
       const state = { phase: 0, amp: 1 };
       rippleTl = gsap.timeline({
         onUpdate() {
+          // power2.out makes amp sub-pixel well before the timeline ends; cut early
+          // so startBreathe() fires immediately rather than after an invisible tail.
+          if (state.amp < 0.05) {
+            rippleTl.kill();
+            rippleTl = null;
+            if (onComplete) onComplete();
+            return;
+          }
           const offsets = dayRects.map((_, i) =>
             Math.sin(i * RIPPLE_FREQ - state.phase) * state.amp * RIPPLE_AMPLITUDE);
           const mean = offsets.reduce((s, o) => s + o, 0) / N;
