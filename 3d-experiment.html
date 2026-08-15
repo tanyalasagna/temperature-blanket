@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Woolly Weather — 3D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,700;1,9..144,900&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:         #12100e;
+      --surface:    #1c1916;
+      --surface-hi: #252119;
+      --rule:       #302b25;
+      --text:       #f3ede4;
+      --muted:      #6e6358;
+      --cta-bg:     #f3ede4;
+      --cta-text:   #12100e;
+      --r-input:    10px;
+      --r-pill:     999px;
+      --display:    'Fraunces', Georgia, serif;
+      --sans:       'DM Sans', system-ui, sans-serif;
+    }
+
+    body { background: var(--bg); overflow: hidden; font-family: var(--sans); color: var(--text); }
+    canvas { display: block; }
+
+    /* ── Overlay panel ── */
+    #panel {
+      position: fixed;
+      top: 1.25rem;
+      right: 1.25rem;
+      width: 272px;
+      background: rgba(28, 25, 22, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--rule);
+      border-radius: 22px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      z-index: 10;
+    }
+
+    #panel h1 {
+      font-family: var(--display);
+      font-style: italic;
+      font-weight: 900;
+      font-size: 1.45rem;
+      letter-spacing: -0.025em;
+      line-height: 1;
+      font-variation-settings: 'opsz' 72, 'WONK' 1;
+      color: var(--text);
+    }
+
+    .field { display: flex; flex-direction: column; gap: 0.35rem; }
+
+    .field label {
+      font-size: 0.68rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    input, select {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-input);
+      padding: 0.55rem 0.8rem;
+      font-family: var(--sans);
+      font-size: 0.9rem;
+      width: 100%;
+      appearance: none;
+      -webkit-appearance: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--muted); }
+    input::placeholder { color: var(--muted); }
+    option { background: var(--surface-hi); color: var(--text); }
+
+    .select-wrap { position: relative; }
+    .select-wrap::after {
+      content: '▾';
+      position: absolute;
+      right: 0.8rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+      font-size: 0.72rem;
+    }
+
+    #place-wrapper { position: relative; }
+    #place-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 5px);
+      left: 0; right: 0;
+      background: var(--surface-hi);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-input);
+      z-index: 20;
+      max-height: 190px;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+    }
+    .place-opt {
+      padding: 0.5rem 0.8rem;
+      cursor: pointer;
+      font-size: 0.83rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--rule);
+      transition: color 0.1s, background 0.1s;
+    }
+    .place-opt:last-child { border-bottom: none; }
+    .place-opt:hover,
+    .place-opt[aria-selected="true"] { background: var(--surface); color: var(--text); }
+
+    #year-notice {
+      font-size: 0.73rem;
+      color: var(--muted);
+      line-height: 1.5;
+      min-height: 1em;
+    }
+
+    #generate-btn {
+      background: var(--cta-bg);
+      color: var(--cta-text);
+      border: none;
+      border-radius: var(--r-pill);
+      padding: 0.7rem 1rem;
+      font-family: var(--display);
+      font-style: italic;
+      font-weight: 700;
+      font-variation-settings: 'opsz' 14, 'WONK' 1;
+      font-size: 1.05rem;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      width: 100%;
+      transition: opacity 0.15s;
+    }
+    #generate-btn:hover    { opacity: 0.88; }
+    #generate-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    #status {
+      font-size: 0.73rem;
+      color: var(--muted);
+      line-height: 1.5;
+      min-height: 1em;
+    }
+    #status.error { color: #d95f5f; }
+
+    /* ── Orbit hint ── */
+    #hint {
+      position: fixed;
+      bottom: 1.25rem;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(243,237,228,0.35);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      pointer-events: none;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Control panel ── -->
+  <div id="panel">
+    <h1>Woolly Weather</h1>
+
+    <div class="field">
+      <label for="place-input">Place</label>
+      <div id="place-wrapper">
+        <input type="text" id="place-input"
+               placeholder="Start typing a place…"
+               autocomplete="off"
+               aria-autocomplete="list"
+               aria-controls="place-dropdown">
+        <div id="place-dropdown" role="listbox"></div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="year-select">Year</label>
+      <div class="select-wrap">
+        <select id="year-select"></select>
+      </div>
+    </div>
+
+    <div id="year-notice"></div>
+
+    <button id="generate-btn">Generate blanket</button>
+
+    <div id="status"></div>
+  </div>
+
+  <div id="hint">drag to orbit · scroll to zoom · right-drag to pan</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three":         "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ── Colour scale — exact match with 2D version ──────────────────────────
+    const COLOUR_SCALE = [
+      { below: -20,      hex: '#1a0050', label: '< −20'      },
+      { below: -10,      hex: '#0000cd', label: '−20 to −10' },
+      { below:   0,      hex: '#4169e1', label: '−10 to 0'   },
+      { below:   5,      hex: '#00bfff', label: '0 to 5'     },
+      { below:  10,      hex: '#20b2aa', label: '5 to 10'    },
+      { below:  15,      hex: '#2e8b57', label: '10 to 15'   },
+      { below:  20,      hex: '#9acd32', label: '15 to 20'   },
+      { below:  25,      hex: '#ffd700', label: '20 to 25'   },
+      { below:  30,      hex: '#ff8c00', label: '25 to 30'   },
+      { below:  35,      hex: '#ff4500', label: '30 to 35'   },
+      { below: Infinity, hex: '#8b0000', label: '> 35'       },
+    ];
+
+    function tempToHex(degC) {
+      for (const band of COLOUR_SCALE) {
+        if (degC < band.below) return band.hex;
+      }
+      return COLOUR_SCALE[COLOUR_SCALE.length - 1].hex;
+    }
+
+    // ── Date utilities ──────────────────────────────────────────────────────
+    function toISODate(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function shiftDays(date, n) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + n);
+      return d;
+    }
+
+    // ── Year ────────────────────────────────────────────────────────────────
+    const THIS_YEAR = new Date().getFullYear();
+
+    // ── Idle grey rows (matches makeIdleRows in 2D) ─────────────────────────
+    function makeIdleColors() {
+      const COUNT = 365, MIN_V = 0x3a, MAX_V = 0x8a, STEP = 7;
+      let v = 0x62, s = 1;
+      const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0xffffffff; };
+      return Array.from({ length: COUNT }, () => {
+        v = Math.max(MIN_V, Math.min(MAX_V, Math.round(v + (rand() - 0.5) * 2 * STEP)));
+        const h = v.toString(16).padStart(2, '0');
+        return `#${h}${h}${h}`;
+      });
+    }
+
+    // ── Geocoding / API ─────────────────────────────────────────────────────
+    let pickedLocation = null;
+    let debounceTimer  = null;
+    let activeOptIdx   = -1;
+
+    function getOpts() {
+      return Array.from(document.querySelectorAll('.place-opt'));
+    }
+
+    async function onPlaceInput() {
+      pickedLocation = null;
+      const query = document.getElementById('place-input').value.trim();
+      clearTimeout(debounceTimer);
+      if (query.length < 2) { closeDropdown(); return; }
+      debounceTimer = setTimeout(async () => {
+        try {
+          const url = `https://geocoding-api.open-meteo.com/v1/search` +
+                      `?name=${encodeURIComponent(query)}&count=6&language=en&format=json`;
+          const json = await (await fetch(url)).json();
+          populateDropdown(json.results || []);
+        } catch { closeDropdown(); }
+      }, 280);
+    }
+
+    function populateDropdown(results) {
+      const dd = document.getElementById('place-dropdown');
+      activeOptIdx = -1;
+      dd.innerHTML = '';
+      if (!results.length) { closeDropdown(); return; }
+      results.forEach(r => {
+        const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+        const div   = document.createElement('div');
+        div.className = 'place-opt';
+        div.setAttribute('role', 'option');
+        div.textContent = label;
+        div.addEventListener('mousedown', e => { e.preventDefault(); pickOption(r, label); });
+        dd.appendChild(div);
+      });
+      dd.style.display = 'block';
+    }
+
+    function pickOption(result, label) {
+      pickedLocation = { latitude: result.latitude, longitude: result.longitude, label };
+      document.getElementById('place-input').value = label;
+      closeDropdown();
+    }
+
+    function closeDropdown() {
+      const dd = document.getElementById('place-dropdown');
+      activeOptIdx = -1;
+      dd.style.display = 'none';
+    }
+
+    function onPlaceKeydown(e) {
+      const dd = document.getElementById('place-dropdown');
+      if (dd.style.display !== 'block') return;
+      const opts = getOpts();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeOptIdx = Math.min(activeOptIdx + 1, opts.length - 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeOptIdx = Math.max(activeOptIdx - 1, -1);
+      } else if (e.key === 'Enter' && activeOptIdx >= 0) {
+        e.preventDefault();
+        opts[activeOptIdx].dispatchEvent(new MouseEvent('mousedown'));
+        return;
+      } else if (e.key === 'Escape') {
+        closeDropdown(); return;
+      }
+      opts.forEach((o, i) =>
+        o.setAttribute('aria-selected', i === activeOptIdx ? 'true' : 'false'));
+    }
+
+    async function geocode(placeName) {
+      const url = `https://geocoding-api.open-meteo.com/v1/search` +
+                  `?name=${encodeURIComponent(placeName)}&count=1&language=en&format=json`;
+      const res  = await fetch(url);
+      if (!res.ok) throw new Error(`Geocoding HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json.results?.length) throw new Error(`No results for "${placeName}"`);
+      const r = json.results[0];
+      return { latitude: r.latitude, longitude: r.longitude,
+               label: [r.name, r.admin1, r.country].filter(Boolean).join(', ') };
+    }
+
+    async function fetchArchive(lat, lon, startDate, endDate) {
+      const url = `https://archive-api.open-meteo.com/v1/archive` +
+                  `?latitude=${lat}&longitude=${lon}` +
+                  `&start_date=${startDate}&end_date=${endDate}` +
+                  `&daily=temperature_2m_max,temperature_2m_min` +
+                  `&timezone=auto`;
+      const res  = await fetch(url);
+      if (!res.ok) throw new Error(`Archive API HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json.daily?.time) throw new Error('Unexpected archive response shape');
+      return json.daily;
+    }
+
+    function parseDailyData(daily) {
+      return daily.time.map((date, i) => {
+        const high = daily.temperature_2m_max[i];
+        const low  = daily.temperature_2m_min[i];
+        const avg  = (high != null && low != null) ? (high + low) / 2 : (high ?? low ?? 0);
+        return { date, avg };
+      });
+    }
+
+    function makeSampleData(startDateStr, endDateStr) {
+      const days = [];
+      let cur    = new Date(startDateStr + 'T12:00:00');
+      const end  = new Date(endDateStr   + 'T12:00:00');
+      while (cur <= end) {
+        const doy      = Math.round((cur - new Date(cur.getFullYear(), 0, 0)) / 86400000);
+        const seasonal = 10 * Math.sin((doy / 365) * 2 * Math.PI - Math.PI / 2);
+        const noise    = (Math.random() - 0.5) * 6;
+        days.push({ date: toISODate(cur), avg: 12 + seasonal + noise });
+        cur = shiftDays(cur, 1);
+      }
+      return days;
+    }
+
+    // ── UI helpers ──────────────────────────────────────────────────────────
+    function setStatus(msg, isError = false) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className   = isError ? 'error' : '';
+    }
+
+    function buildYearSelect() {
+      const sel = document.getElementById('year-select');
+      for (let y = THIS_YEAR; y >= 2000; y--) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        if (y === THIS_YEAR - 1) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      refreshYearNotice();
+    }
+
+    function refreshYearNotice() {
+      const year   = parseInt(document.getElementById('year-select').value, 10);
+      const notice = document.getElementById('year-notice');
+      if (year === THIS_YEAR) {
+        const safeEnd  = shiftDays(new Date(), -5);
+        const dayCount = Math.round((safeEnd - new Date(THIS_YEAR, 0, 1)) / 86400000) + 1;
+        notice.textContent =
+          `${THIS_YEAR} isn't over yet — showing ${dayCount} completed days.`;
+      } else {
+        notice.textContent = '';
+      }
+    }
+
+    // ── Three.js scene ──────────────────────────────────────────────────────
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled     = true;
+    renderer.shadowMap.type        = THREE.PCFSoftShadowMap;
+    renderer.toneMapping           = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure   = 1.1;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x12100e);
+    scene.fog = new THREE.Fog(0x12100e, 12, 22);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.01, 50);
+    camera.position.set(0, 0.4, 5.5);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping  = true;
+    controls.dampingFactor  = 0.055;
+    controls.minDistance    = 1.5;
+    controls.maxDistance    = 14;
+    controls.maxPolarAngle  = Math.PI * 0.8;
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+    // Warm ambient
+    scene.add(new THREE.AmbientLight(0xfff5e8, 0.55));
+
+    // Warm key light — primary shadow caster
+    const key = new THREE.DirectionalLight(0xffe8c8, 2.2);
+    key.position.set(2.5, 4, 3.5);
+    key.castShadow            = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.near    = 0.5;
+    key.shadow.camera.far     = 20;
+    key.shadow.camera.left    = -4;
+    key.shadow.camera.right   = 4;
+    key.shadow.camera.top     = 6;
+    key.shadow.camera.bottom  = -6;
+    key.shadow.bias           = -0.0005;
+    scene.add(key);
+
+    // Cool fill from lower-left
+    const fillLight = new THREE.DirectionalLight(0xc8d8ff, 0.45);
+    fillLight.position.set(-3, -2, 2);
+    scene.add(fillLight);
+
+    // ── Blanket geometry (unchanged from initial) ───────────────────────────
+    const W = 1.85, H = 3.4;
+    const geo = new THREE.PlaneGeometry(W, H, 8, 365);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const nx = pos.getX(i) / (W * 0.5);
+      const ny = pos.getY(i) / (H * 0.5);
+      pos.setZ(i, -0.14 * (1 - ny * ny) + -0.05 * (1 - nx * nx));
+    }
+    geo.computeVertexNormals();
+
+    // ── Texture — kept at module scope so updateBlanketTexture can redraw it ─
+    const texCanvas = document.createElement('canvas');
+    texCanvas.width  = 2;
+    texCanvas.height = 365;
+    const texCtx = texCanvas.getContext('2d');
+
+    function paintTexture(colors) {
+      const n = colors.length;
+      if (texCanvas.height !== n) texCanvas.height = n;
+      // Reverse fill: CanvasTexture flipY=true puts canvas row 0 at UV y=0
+      // (mesh bottom), so fill in reverse to put day 0 (Jan) at top of mesh.
+      for (let i = 0; i < n; i++) {
+        texCtx.fillStyle = colors[n - 1 - i];
+        texCtx.fillRect(0, i, 2, 1);
+      }
+    }
+
+    paintTexture(makeIdleColors());
+
+    const texture = new THREE.CanvasTexture(texCanvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+
+    function updateBlanketTexture(colors) {
+      paintTexture(colors);
+      texture.needsUpdate = true;
+    }
+
+    const mat = new THREE.MeshStandardMaterial({
+      map:       texture,
+      roughness: 0.94,
+      metalness: 0.0,
+      side:      THREE.DoubleSide,
+    });
+
+    const blanket = new THREE.Mesh(geo, mat);
+    blanket.castShadow    = true;
+    blanket.receiveShadow = true;
+    scene.add(blanket);
+
+    // ── Render loop ─────────────────────────────────────────────────────────
+    (function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    })();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ── Generate ────────────────────────────────────────────────────────────
+    async function generate() {
+      const placeText = document.getElementById('place-input').value.trim();
+      const year      = parseInt(document.getElementById('year-select').value, 10);
+      const btn       = document.getElementById('generate-btn');
+
+      if (!placeText) { setStatus('Enter a location first.', true); return; }
+
+      btn.disabled = true;
+      setStatus('');
+
+      const startDate = `${year}-01-01`;
+      const endDate   = year === THIS_YEAR
+        ? toISODate(shiftDays(new Date(), -5))
+        : `${year}-12-31`;
+
+      let days;
+      try {
+        let loc;
+        if (pickedLocation) {
+          loc = pickedLocation;
+        } else {
+          setStatus('Looking up location…');
+          loc = await geocode(placeText);
+        }
+        setStatus(`Fetching ${year} temperatures for ${loc.label}…`);
+        const daily = await fetchArchive(loc.latitude, loc.longitude, startDate, endDate);
+        days = parseDailyData(daily);
+        setStatus(`${loc.label} · ${days.length} days · ${startDate} → ${endDate}`);
+      } catch (err) {
+        console.warn('Falling back to sample data:', err);
+        days = makeSampleData(startDate, endDate);
+        setStatus(`Couldn't fetch live data — showing sample instead.`, true);
+      }
+
+      updateBlanketTexture(days.map(d => tempToHex(d.avg)));
+      btn.disabled = false;
+    }
+
+    // ── Wire up ──────────────────────────────────────────────────────────────
+    buildYearSelect();
+
+    document.getElementById('generate-btn').addEventListener('click', generate);
+    document.getElementById('year-select').addEventListener('change', refreshYearNotice);
+
+    const placeEl = document.getElementById('place-input');
+    placeEl.addEventListener('input',   onPlaceInput);
+    placeEl.addEventListener('keydown', onPlaceKeydown);
+    placeEl.addEventListener('blur',    () => setTimeout(closeDropdown, 160));
+  </script>
+</body>
+</html>
