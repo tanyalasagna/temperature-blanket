@@ -430,8 +430,8 @@
     // ── Peripheral tilt state ────────────────────────────────────────────────
     const MAX_TILT  = 0.09;   // ±radians — wide enough to reveal thickness and ply profile
     const TILT_DAMP = 0.035;  // lerp factor — responsive but still weighted
-    let   tiltX     = 0.15;   // current blanket.rotation.x
-    let   tiltY     = -0.10;  // current blanket.rotation.y
+    let   tiltX     = 0.0;    // damped fabric bend target X (pointer.y)
+    let   tiltY     = 0.0;    // damped fabric bend target Y (pointer.x)
 
     // Warm ambient
     scene.add(new THREE.AmbientLight(0xfff5e8, 1.8));
@@ -440,14 +440,15 @@
     const key = new THREE.DirectionalLight(0xffe8c8, 1.0);
     key.position.set(0, 6, 4);           // centered overhead so all 4 corners shadow evenly
     key.castShadow              = true;
-    key.shadow.mapSize.width    = 1024;
-    key.shadow.mapSize.height   = 1024;
-    key.shadow.camera.left      = -2.5;
-    key.shadow.camera.right     =  2.5;
-    key.shadow.camera.top       =  2.5;
-    key.shadow.camera.bottom    = -2.5;
+    key.shadow.mapSize.width    = 2048;
+    key.shadow.mapSize.height   = 2048;
+    key.shadow.camera.left      = -3.5;
+    key.shadow.camera.right     =  3.5;
+    key.shadow.camera.top       =  3.5;
+    key.shadow.camera.bottom    = -3.5;
     key.shadow.camera.near      = 0.5;
-    key.shadow.camera.far       = 15;
+    key.shadow.camera.far       = 25;
+    key.shadow.bias             = -0.0005;
     scene.add(key);
 
     // Cool fill from lower-left
@@ -461,11 +462,19 @@
     scene.add(rimLight);
 
     // ── Blanket geometry ────────────────────────────────────────────────────
-    const W = 2.20, H = 3.4, D = 0.28;
-    const geo = new THREE.BoxGeometry(W, H, D, 64, 365, 1);
+    const W = 2.20, H = 3.4, D = 0.45;
+    const geo = new THREE.BoxGeometry(W, H, D, 180, 365, 1);
     const pos = geo.attributes.position;
-    const CORNER_RADIUS = 0.012; // 1px rounded corners
+    const CORNER_RADIUS = 0.08; // subtle rounding — soft but structurally square
+
+    // 0 = Back, 1 = Front, 2 = Rim — labelled BEFORE sag/bow moves vertices
+    const vertType = new Uint8Array(pos.count);
+
     for (let i = 0; i < pos.count; i++) {
+      const _vx = pos.getX(i), _vy = pos.getY(i), _vz = pos.getZ(i);
+      const isRim = Math.abs(_vx) >= (W * 0.5) - 0.001 || Math.abs(_vy) >= (H * 0.5) - 0.001;
+      vertType[i] = isRim ? 2 : (_vz > 0 ? 1 : 0);
+
       let vx = pos.getX(i);
       let vy = pos.getY(i);
       const vz = pos.getZ(i);
@@ -483,19 +492,7 @@
         }
       }
 
-      // 1. Sag + bow
-      const nx  = vx / (W * 0.5);
-      const ny  = vy / (H * 0.5);
-      const sag = -0.14 * (1 - ny * ny);
-      const bow = -0.05 * (1 - nx * nx);
-      pos.setZ(i, vz + sag + bow);
-
-      // 2. Organic crochet row undulation — low-frequency sine across rows,
-      //    cos cross-stitch across columns, mimics real yarn tension variation
-      const crochetRipple = Math.sin(vy * 18.0) * 0.03 + Math.cos(vx * 12.0) * 0.015;
-      pos.setZ(i, pos.getZ(i) + crochetRipple);
-
-      // 3. Micro-tension edge — microscopic warp that barely breaks the straight line
+      // 1. Micro-tension edge — microscopic warp that barely breaks the straight line
       const edgeDist = Math.abs(vx / (W * 0.5));
       if (edgeDist > 0.85) {
         const edgeWeight = edgeDist - 0.85;
@@ -517,7 +514,11 @@
       // 6. Frayed yarn halo — protruding fiber spikes along outer perimeter
       const edgeDistX = Math.abs(vx / (W * 0.5));
       const edgeDistY = Math.abs(vy / (H * 0.5));
-      if (edgeDistX > 0.88 || edgeDistY > 0.88) {
+      // Skip fray noise inside the rounded corner zone so the arcs stay clean
+      const cx_fray = Math.abs(pos.getX(i)) - (W * 0.5 - CORNER_RADIUS);
+      const cy_fray = Math.abs(pos.getY(i)) - (H * 0.5 - CORNER_RADIUS);
+      const isCorner = cx_fray > 0 && cy_fray > 0;
+      if ((edgeDistX > 0.88 || edgeDistY > 0.88) && !isCorner) {
         const frayNoise = Math.sin(vx * 400.0) * Math.cos(vy * 400.0);
         if (edgeDistX > edgeDistY) {
           pos.setX(i, pos.getX(i) + Math.sign(vx) * Math.abs(frayNoise) * 0.012);
@@ -544,7 +545,6 @@
     const flipZ    = new Float32Array(numVerts);
     const flipX    = new Float32Array(numVerts);
     const flipY    = new Float32Array(numVerts);
-    let   flipActive = false;
     for (let i = 0; i < numVerts; i++) {
       baseX[i] = posArr[i * 3];
       baseY[i] = posArr[i * 3 + 1];
@@ -557,11 +557,14 @@
     // ── Vertex colours — map each vertex's Y position to a day hex colour ───
     // BoxGeometry has separate vertex instances per face, so all 6 faces get
     // the same Y→day mapping, giving clean horizontal stripes through the depth.
-    const colorArr  = new Float32Array(numVerts * 3);
-    const colorAttr = new THREE.BufferAttribute(colorArr, 3);
-    geo.setAttribute('color', colorAttr);
+    const colorArrCurrent  = new Float32Array(numVerts * 3);
+    const colorArrNext     = new Float32Array(numVerts * 3);
+    const colorAttrCurrent = new THREE.BufferAttribute(colorArrCurrent, 3);
+    const colorAttrNext    = new THREE.BufferAttribute(colorArrNext, 3);
+    geo.setAttribute('color',      colorAttrCurrent);
+    geo.setAttribute('aColorNext', colorAttrNext);
 
-    function applyVertexColors(hexColors) {
+    function applyVertexColors(hexColors, targetArr = colorArrCurrent, targetAttr = colorAttrCurrent) {
       const n = hexColors.length;
       // Pre-parse so the inner loop does no string work
       const parsed = hexColors.map(h => [
@@ -575,52 +578,161 @@
         const dayIdx = Math.max(0, Math.min(n - 1, Math.round(t * (n - 1))));
         let [r, g, b] = parsed[dayIdx];
 
-        // Darken left/right edge vertices to simulate AO shadow at the perimeter
-        const edgeFactor = Math.abs(baseX[i] / (W * 0.5));
-        if (edgeFactor > 0.7) {
-          const darken = 1.0 - ((edgeFactor - 0.7) / 0.3) * 0.35;
-          r *= darken; g *= darken; b *= darken;
+        if (vertType[i] === 2) {
+          // Rim (side thickness faces) — 70% darker, frames the 3D ply as a dark sandwich
+          r *= 0.30; g *= 0.30; b *= 0.30;
+        } else if (vertType[i] === 0) {
+          // Back face — 55% darker, deep shadow on the underside during folds
+          r *= 0.45; g *= 0.45; b *= 0.45;
+        } else {
+          // Front face — AO edge darkening only
+          const edgeFactor = Math.abs(baseX[i] / (W * 0.5));
+          if (edgeFactor > 0.7) {
+            const darken = 1.0 - ((edgeFactor - 0.7) / 0.3) * 0.35;
+            r *= darken; g *= darken; b *= darken;
+          }
         }
 
-        colorArr[i * 3]     = r;
-        colorArr[i * 3 + 1] = g;
-        colorArr[i * 3 + 2] = b;
+        targetArr[i * 3]     = r;
+        targetArr[i * 3 + 1] = g;
+        targetArr[i * 3 + 2] = b;
       }
-      colorAttr.needsUpdate = true;
+      targetAttr.needsUpdate = true;
     }
 
+    // Initialize both buffers identically so wipe starts with no visible change
     applyVertexColors(makeIdleColors());
+    colorArrNext.set(colorArrCurrent);
+    colorAttrNext.needsUpdate = true;
 
     function updateBlanketTexture(hexColors) {
-      applyVertexColors(hexColors);
+      // Write incoming colors into the "next" slot
+      applyVertexColors(hexColors, colorArrNext, colorAttrNext);
+      blanketUniforms.uBloomProgress.value = 0;
+      gsap.to(blanketUniforms.uBloomProgress, {
+        value: 1,
+        duration: 3.5,
+        ease: 'power1.inOut',
+        onComplete() {
+          // Swap next → current behind the scenes; reset wipe so it's ready again
+          colorArrCurrent.set(colorArrNext);
+          colorAttrCurrent.needsUpdate = true;
+          blanketUniforms.uBloomProgress.value = 0;
+        }
+      });
     }
+
+    function createYarnBumpMap() {
+      const canvas = document.createElement('canvas');
+      canvas.width  = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, 256, 256);
+
+      for (let y = 0; y < 256; y += 32) {
+        for (let x = 0; x < 256; x += 32) {
+          const xOffset = (y % 64 === 0) ? 0 : 16;
+          const cx = x + xOffset + 16;
+          const cy = y + 16;
+          const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 20);
+          grad.addColorStop(0, '#ffffff');
+          grad.addColorStop(1, '#808080');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(18, 140);
+      return tex;
+    }
+    const yarnBumpMap = createYarnBumpMap();
 
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      roughness:    1.0,
+      roughness:    0.9,
       metalness:    0.0,
       flatShading:  false,
+      bumpMap:      yarnBumpMap,
+      bumpScale:    0.045,
+      side:         THREE.DoubleSide,
     });
 
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uBloomProgress = blanketUniforms.uBloomProgress;
+
+      shader.vertexShader = `
+        uniform float uBloomProgress;
+        varying float vDisplacedY;
+        attribute vec3 aColorNext;
+        varying vec3 vColorNext;
+      ` + shader.vertexShader;
+
+      shader.vertexShader = shader.vertexShader.replace(
+        `#include <begin_vertex>`,
+        `#include <begin_vertex>
+        vColorNext = aColorNext;
+
+        // Physical ripple — traveling fold at the wipe line
+        float normYv    = clamp((position.y + ${(H * 0.5).toFixed(2)}) / ${H.toFixed(2)}, 0.0, 1.0);
+        float progressV = 1.2 - (uBloomProgress * 1.4);
+        float distV     = normYv - progressV;
+        float ripple    = pow(smoothstep(0.08, 0.0, abs(distV)), 1.5);
+        transformed.z  += ripple * 0.10;
+        transformed.y  -= ripple * sign(distV) * 0.015;
+
+        // Capture world-Y AFTER the ripple so the fragment wipe aligns with actual geometry
+        vDisplacedY = (modelMatrix * vec4(transformed, 1.0)).y;`
+      );
+
+      shader.fragmentShader = `
+        uniform float uBloomProgress;
+        varying float vDisplacedY;
+        varying vec3  vColorNext;
+      ` + shader.fragmentShader;
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+        `#include <color_fragment>`,
+        `#ifdef USE_COLOR
+          // Normalize post-ripple world-Y to 0..1 — stays in sync with the geometry wave
+          float normY    = clamp((vDisplacedY + ${(H * 0.5).toFixed(2)}) / ${H.toFixed(2)}, 0.0, 1.0);
+          float progress = 1.2 - (uBloomProgress * 1.4);
+          float wipe     = smoothstep(progress - 0.005, progress + 0.005, normY);
+          diffuseColor.rgb *= mix(vColor, vColorNext, wipe);
+        #endif`
+      );
+    };
+
     const blanket = new THREE.Mesh(geo, mat);
-    blanket.rotation.x    = 0.15;
-    blanket.rotation.y    = -0.10;
+    blanket.rotation.x    = 0;
+    blanket.rotation.y    = 0;
     blanket.castShadow    = true;
     blanket.receiveShadow = true;
     scene.add(blanket);
 
     // ── Hover lift ───────────────────────────────────────────────────────────
-    const HOVER_RADIUS = 0.55;                          // bell-curve spread (world units)
-    const HOVER_LIFT   = 0.30;                          // peak Z push toward camera
+    const HOVER_RADIUS = 0.40;                          // cloth displacement radius (world units)
+    const HOVER_LIFT   = 0.55;                          // peak Z push toward camera
     const HOVER_DAMP   = 0.025;                         // lerp factor per frame — heavy drag
     const SIGMA2       = (HOVER_RADIUS * 0.42) ** 2;   // pre-baked Gaussian denominator
 
-    const raycaster   = new THREE.Raycaster();
-    const pointer     = new THREE.Vector2(Infinity, Infinity);
-    let   isHovering  = false;
-    let   hoverActive = false;  // true while any vertex is still moving
+    const raycaster      = new THREE.Raycaster();
+    const pointer        = new THREE.Vector2(Infinity, Infinity);
+    let   isHovering     = false;
+    let   hoverActive    = false;  // true while any vertex is still moving
+    const targetHoverPt  = new THREE.Vector3();
+    const currentHoverPt = new THREE.Vector3();
+    const HOVER_FRICTION = 0.04;   // low = heavy drag, high = slippery
+    const FRICTION_GRID  = 0.06;   // stitch-snap grid size in world units
 
     renderer.domElement.addEventListener('pointermove', e => {
+      if (isRolling) { isHovering = false; return; }
       pointer.x =  (e.clientX / window.innerWidth)  * 2 - 1;
       pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
       if (!isHovering) { isHovering = true; hoverActive = true; }
@@ -635,83 +747,76 @@
     // not guessed from W/H, so they're correct even after sag+bow displacement.
     geo.computeBoundingBox();
 
-    const FLIP_RADIUS   = 150.0; // cranked to prove vertices can move — tune down after
-    const LIFT_HEIGHT   = 50.0;  // cranked to prove vertices can move — tune down after
-    const CORNER_THRESH = 2.0;   // local-space distance threshold for a click to register
+    const blanketUniforms = {
+      uBloomProgress: { value: 0.0 }
+    };
 
     let activeTween = null;
+    const rollTarget = { progress: 0 };
+    let isRolling = false;
+
+    function applyRollMath() {
+      const rawP = rollTarget.progress;
+      const p = Math.max(0, Math.min(1, rawP));
+      const ROLL_RADIUS = 0.18;
+      const drapeIntensity = 1 - p;
+
+      for (let i = 0; i < numVerts; i++) {
+        const vx = baseX[i];
+        const vy = baseY[i];
+
+        const nx = vx / (W * 0.5);
+        const ny = vy / (H * 0.5);
+        const hangFactor  = Math.max(0, (1 - ny) / 2);
+        const drapeFolds  = Math.sin(nx * Math.PI * 3.0) * 0.22 * hangFactor;
+        const sag         = -0.14 * (1 - ny * ny);
+        const edgePinch   = (1 - nx * nx) * 0.06 * Math.sign(vx) * hangFactor;
+        const bottomDroop = (1 - nx * nx) * 0.12 * hangFactor;
+        const topDroop    = (1 - nx * nx) * 0.04;
+
+        const dX = -edgePinch * drapeIntensity;
+        const dY = -(bottomDroop + topDroop) * drapeIntensity;
+        const dZ = (sag + drapeFolds) * drapeIntensity;
+
+        const distFromTop = (H * 0.5) - vy;
+        const flatLength  = H * (1 - p);
+
+        if (distFromTop > flatLength) {
+          const rolledDist = distFromTop - flatLength;
+          const theta = rolledDist / ROLL_RADIUS;
+          const curlZ = ROLL_RADIUS * (1 - Math.cos(theta));
+          const curlY = ROLL_RADIUS * Math.sin(theta);
+          flipZ[i] = dZ + curlZ;
+          flipY[i] = dY + (distFromTop - flatLength) + curlY;
+          flipX[i] = dX;
+        } else {
+          flipX[i] = dX;
+          flipY[i] = dY;
+          flipZ[i] = dZ;
+        }
+      }
+    }
+    applyRollMath(); // initialize idle drape on load
 
     renderer.domElement.addEventListener('pointerdown', e => {
-      const clickVec = new THREE.Vector2(
+      raycaster.setFromCamera(new THREE.Vector2(
          (e.clientX / window.innerWidth)  * 2 - 1,
         -(e.clientY / window.innerHeight) * 2 + 1
-      );
-      raycaster.setFromCamera(clickVec, camera);
+      ), camera);
       const hits = raycaster.intersectObject(blanket);
       if (!hits.length) return;
 
-      // Convert world-space hit to blanket local space before comparing to vertices
-      const localClick = blanket.worldToLocal(hits[0].point.clone());
+      if (activeTween) { activeTween.kill(); }
+      rollTarget.progress = 0;
+      isRolling = true;
 
-      const bb = geo.boundingBox;
-      const CORNERS = [
-        { x: bb.max.x, y: bb.max.y },  // top-right
-        { x: bb.min.x, y: bb.max.y },  // top-left
-        { x: bb.max.x, y: bb.min.y },  // bottom-right
-        { x: bb.min.x, y: bb.min.y },  // bottom-left
-      ];
-
-      let targetCorner = null, nearestDist = Infinity;
-      for (const c of CORNERS) {
-        const d = Math.hypot(localClick.x - c.x, localClick.y - c.y);
-        if (d < nearestDist) { nearestDist = d; targetCorner = c; }
-      }
-      if (nearestDist > CORNER_THRESH) return;
-
-      console.log('Corner clicked:', targetCorner, ' dist:', nearestDist.toFixed(3));
-      console.log('Blanket bounds:', geo.boundingBox.max.x - geo.boundingBox.min.x, 'x', geo.boundingBox.max.y - geo.boundingBox.min.y);
-
-      if (activeTween) { activeTween.kill(); activeTween = null; }
-
-      const flipTarget  = { progress: 0 };
-      const FLIP_RADIUS = 0.35;
-      const LIFT_Z      = 0.45;
-      const PULL_IN     = 0.25;
-
-      const dirX = Math.sign(targetCorner.x);
-      const dirY = Math.sign(targetCorner.y);
-
-      activeTween = gsap.to(flipTarget, {
-        progress: 1,
-        duration: 0.5,
-        ease: 'power4.out',
-        yoyo: true,
-        repeat: 1,
-        repeatDelay: 0.1,
-        onStart() { flipActive = true; },
-        onUpdate() {
-          for (let i = 0; i < numVerts; i++) {
-            const dx   = baseX[i] - targetCorner.x;
-            const dy   = baseY[i] - targetCorner.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < FLIP_RADIUS) {
-              let t = 1 - (dist / FLIP_RADIUS);
-              // Smoothstep for organic fabric easing
-              t = t * t * (3 - 2 * t);
-              flipZ[i] =  t * LIFT_Z  * flipTarget.progress;
-              flipX[i] = -dirX * t * PULL_IN * flipTarget.progress;
-              flipY[i] = -dirY * t * PULL_IN * flipTarget.progress;
-            } else {
-              flipX[i] = 0; flipY[i] = 0; flipZ[i] = 0;
-            }
-          }
-        },
-        onComplete() {
-          flipActive = false;
-          activeTween = null;
-          for (let i = 0; i < numVerts; i++) { flipZ[i] = 0; flipX[i] = 0; flipY[i] = 0; }
-        },
+      activeTween = gsap.timeline({
+        onUpdate: applyRollMath,
+        onComplete() { isRolling = false; activeTween = null; applyRollMath(); }
       });
+      activeTween
+        .to(rollTarget, { progress: 0.5, duration: 0.6, ease: 'power2.inOut' })
+        .to(rollTarget, { progress: 0, duration: 1.0, ease: 'back.out(1.2)' });
     });
 
     // ── Render loop ─────────────────────────────────────────────────────────
@@ -720,10 +825,9 @@
 
       // Peripheral tilt — lerp toward pointer-driven target; guard Infinity on first frame
       if (isFinite(pointer.x)) {
-        tiltX = THREE.MathUtils.lerp(tiltX,  pointer.y * MAX_TILT, TILT_DAMP);
-        tiltY = THREE.MathUtils.lerp(tiltY, -pointer.x * MAX_TILT, TILT_DAMP);
-        blanket.rotation.x = tiltX;
-        blanket.rotation.y = tiltY;
+        // Damp the pointer targets — fabric bend uses these per-vertex, not mesh rotation
+        tiltX = THREE.MathUtils.lerp(tiltX,  pointer.y * 0.35, TILT_DAMP);
+        tiltY = THREE.MathUtils.lerp(tiltY,  pointer.x * 0.35, TILT_DAMP);
 
         // Dynamic lighting — sweep key and rim with cursor so stitch shadows shift
         key.position.x     =  pointer.x * 1.5;
@@ -733,12 +837,19 @@
       }
 
       // ── Vertex loop — runs every frame for continuous breathing ─────────────
-      // Raycaster only fires when the pointer is over the mesh
       let hitPt = null;
       if (isHovering) {
         raycaster.setFromCamera(pointer, camera);
         const hits = raycaster.intersectObject(blanket);
-        hitPt = hits.length ? hits[0].point : null;
+        if (hits.length) {
+          // Snap to stitch grid for tactile yarn-bump friction
+          const snappedX = Math.round(hits[0].point.x / FRICTION_GRID) * FRICTION_GRID;
+          const snappedY = Math.round(hits[0].point.y / FRICTION_GRID) * FRICTION_GRID;
+          targetHoverPt.set(snappedX, snappedY, hits[0].point.z);
+          // Lerp current position toward target — low factor = heavy fabric drag
+          currentHoverPt.lerp(targetHoverPt, HOVER_FRICTION);
+          hitPt = currentHoverPt;
+        }
       }
 
       const time = performance.now() * 0.0012;
@@ -747,28 +858,35 @@
       for (let i = 0; i < numVerts; i++) {
         // 1. Hover target calculation (isolated)
         let target = baseZ[i];
+        let hoverPullY = 0;
         if (hitPt) {
           const dx   = baseX[i] - hitPt.x;
           const dy   = baseY[i] - hitPt.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           const fabricFalloff = Math.max(0, 1 - (dist / HOVER_RADIUS));
-          target += HOVER_LIFT * (fabricFalloff * fabricFalloff);
+          target += HOVER_LIFT * (fabricFalloff * fabricFalloff * (3 - 2 * fabricFalloff));
+          // Upward Y tension — fabric hiked up around the cursor like cloth being grabbed
+          hoverPullY = 0.15 * fabricFalloff * Math.max(0, baseY[i] - hitPt.y + 0.5);
         }
 
         const prev = currentZ[i];
         currentZ[i] = prev + (target - prev) * HOVER_DAMP;
 
-        // 2. Hanging drape weight: 0 at top (+H/2), 1.0 at bottom hem (-H/2)
+        // 2. Hanging drape weight — 0 at top anchor, 1.0 at bottom hem
         const hangWeight = Math.max(0, (H * 0.5 - baseY[i]) / H);
 
-        // 3. Breathing — diagonal rolls across the rows, amplitude large enough to read
-        const breathZ = Math.sin(time + baseY[i] * 1.5 + baseX[i] * 0.8) * 0.08 * hangWeight;
-        const breathX = Math.cos(time * 0.7 - baseY[i] * 0.6) * 0.03 * hangWeight;
+        // 3. Heavy cascading wave rolling downward
+        const breathZ = (Math.sin(time + baseY[i] * 1.5 + baseX[i] * 0.8) * 0.08) * hangWeight;
+        const breathX = (Math.cos(time * 0.7 - baseY[i] * 0.6) * 0.03) * hangWeight;
 
-        // 4. Combine: base + flip + hover + breathing
-        posArr[i * 3]     = baseX[i] + flipX[i] + breathX;
-        posArr[i * 3 + 1] = baseY[i] + flipY[i];
-        posArr[i * 3 + 2] = currentZ[i] + flipZ[i] + breathZ;
+        // 4. Fluid fabric bending — top pinned, bottom swings with damped pointer tilt
+        const fabricBendZ = (tiltX * hangWeight * hangWeight) * (1.0 - Math.abs(baseX[i]) / W);
+        const fabricBendX = (tiltY * hangWeight) * (baseY[i] * 0.1);
+
+        // 5. Combine: base + flip + hover Y-pull + breathing + fabric bend
+        posArr[i * 3]     = baseX[i] + flipX[i] + breathX + fabricBendX;
+        posArr[i * 3 + 1] = baseY[i] + flipY[i] + hoverPullY;
+        posArr[i * 3 + 2] = currentZ[i] + flipZ[i] + breathZ + fabricBendZ;
 
         const delta = Math.abs(currentZ[i] - baseZ[i]);
         if (delta > maxDelta) maxDelta = delta;
@@ -778,7 +896,7 @@
       geo.computeVertexNormals();
 
       // Reset hover damping state once pointer has left and all vertices settled
-      if (!isHovering && maxDelta < 0.0002 && !flipActive) {
+      if (!isHovering && maxDelta < 0.0002 && !activeTween) {
         for (let i = 0; i < numVerts; i++) currentZ[i] = baseZ[i];
         hoverActive = false;
       }
