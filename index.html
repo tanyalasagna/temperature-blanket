@@ -3,77 +3,963 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Woolly Weather</title>
-  <link rel="stylesheet" href="styles.css">
+  <title>Woolly Weather — 3D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,700;1,9..144,900&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:         #12100e;
+      --surface:    #1c1916;
+      --surface-hi: #252119;
+      --rule:       #302b25;
+      --text:       #f3ede4;
+      --muted:      #6e6358;
+      --cta-bg:     #f3ede4;
+      --cta-text:   #12100e;
+      --r-input:    10px;
+      --r-pill:     999px;
+      --display:    'Fraunces', Georgia, serif;
+      --sans:       'DM Sans', system-ui, sans-serif;
+    }
+
+    body { background: var(--bg); overflow: hidden; font-family: var(--sans); color: var(--text); }
+    canvas { display: block; }
+
+    /* ── Overlay panel ── */
+    #panel {
+      position: fixed;
+      top: 1.25rem;
+      right: 1.25rem;
+      width: 272px;
+      background: rgba(28, 25, 22, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--rule);
+      border-radius: 22px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      z-index: 10;
+    }
+
+    #panel h1 {
+      font-family: var(--display);
+      font-style: italic;
+      font-weight: 900;
+      font-size: 1.45rem;
+      letter-spacing: -0.025em;
+      line-height: 1;
+      font-variation-settings: 'opsz' 72, 'WONK' 1;
+      color: var(--text);
+    }
+
+    .field { display: flex; flex-direction: column; gap: 0.35rem; }
+
+    .field label {
+      font-size: 0.68rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    input, select {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-input);
+      padding: 0.55rem 0.8rem;
+      font-family: var(--sans);
+      font-size: 0.9rem;
+      width: 100%;
+      appearance: none;
+      -webkit-appearance: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--muted); }
+    input::placeholder { color: var(--muted); }
+    option { background: var(--surface-hi); color: var(--text); }
+
+    .select-wrap { position: relative; }
+    .select-wrap::after {
+      content: '▾';
+      position: absolute;
+      right: 0.8rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+      font-size: 0.72rem;
+    }
+
+    #place-wrapper { position: relative; }
+    #place-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 5px);
+      left: 0; right: 0;
+      background: var(--surface-hi);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-input);
+      z-index: 20;
+      max-height: 190px;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+    }
+    .place-opt {
+      padding: 0.5rem 0.8rem;
+      cursor: pointer;
+      font-size: 0.83rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--rule);
+      transition: color 0.1s, background 0.1s;
+    }
+    .place-opt:last-child { border-bottom: none; }
+    .place-opt:hover,
+    .place-opt[aria-selected="true"] { background: var(--surface); color: var(--text); }
+
+    #year-notice {
+      font-size: 0.73rem;
+      color: var(--muted);
+      line-height: 1.5;
+      min-height: 1em;
+    }
+
+    #generate-btn {
+      background: var(--cta-bg);
+      color: var(--cta-text);
+      border: none;
+      border-radius: var(--r-pill);
+      padding: 0.7rem 1rem;
+      font-family: var(--display);
+      font-style: italic;
+      font-weight: 700;
+      font-variation-settings: 'opsz' 14, 'WONK' 1;
+      font-size: 1.05rem;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      width: 100%;
+      transition: opacity 0.15s;
+    }
+    #generate-btn:hover    { opacity: 0.88; }
+    #generate-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    #status {
+      font-size: 0.73rem;
+      color: var(--muted);
+      line-height: 1.5;
+      min-height: 1em;
+    }
+    #status.error { color: #d95f5f; }
+
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js" integrity="sha512-NcZdtrT77bJr4STcmsGAESr06BYGE8woZdSdEgqnpyqac7sugNO+Tr4bGwGF3MsnEkGKhU2KL2xh6Ec+BqsaHA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
 
-  <main>
+  <!-- ── Control panel ── -->
+  <div id="panel">
+    <h1>Woolly Weather</h1>
 
-    <!-- ── Left: blanket ── -->
-    <div id="blanket-col">
-      <div id="blanket-wrap">
+    <div class="field">
+      <label for="place-input">Place</label>
+      <div id="place-wrapper">
+        <input type="text" id="place-input"
+               placeholder="Start typing a place…"
+               autocomplete="off"
+               aria-autocomplete="list"
+               aria-controls="place-dropdown">
+        <div id="place-dropdown" role="listbox"></div>
       </div>
     </div>
 
-    <!-- ── Right: controls ── -->
-    <div id="controls-col">
-
-      <div id="instructions">
-        <strong>How it works</strong>
-        A temperature blanket gives every day of the year its own colour based on
-        how warm or cold it was. Pick a place and a year — each horizontal stripe
-        is one day, shaded from icy blues through to fiery reds. Data fetched live
-        from <a href="https://open-meteo.com" target="_blank">Open-Meteo</a>.
+    <div class="field">
+      <label for="year-select">Year</label>
+      <div class="select-wrap">
+        <select id="year-select"></select>
       </div>
-
-      <div class="field">
-        <label for="place-input">Place</label>
-        <div id="place-wrapper">
-          <input type="text" id="place-input"
-                 placeholder="Start typing a place…"
-                 autocomplete="off"
-                 aria-autocomplete="list"
-                 aria-controls="place-dropdown">
-          <div id="place-dropdown" role="listbox"></div>
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="year-select">Year</label>
-        <div class="select-wrap">
-          <select id="year-select"></select>
-        </div>
-      </div>
-
-      <div id="year-notice"></div>
-
-      <button id="generate-btn">Generate blanket</button>
-
-      <div id="status"></div>
-
-      <div id="legend"></div>
-
-      <div id="bottom-row">
-        <button id="designer-note-btn" class="ghost-pill">Note from the designer</button>
-        <button id="view-more-btn" class="ghost-pill">View more blankets</button>
-      </div>
-
     </div>
-  </main>
 
-  <!-- Designer note modal -->
-  <div id="note-modal" role="dialog" aria-modal="true" aria-labelledby="note-modal-title">
-    <div id="note-modal-box">
-      <button id="note-modal-close" aria-label="Close">✕</button>
-      <strong id="note-modal-title">Note from the designer</strong>
-      Temperature blankets are a beloved knitting and crochet tradition — one stripe
-      per day, colour chosen by the thermometer. This tool generates the colour plan
-      for any place and year so you can cast on straight away.
-    </div>
+    <div id="year-notice"></div>
+
+    <button id="generate-btn">Generate blanket</button>
+
+    <div id="status"></div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js" integrity="sha512-NcZdtrT77bJr4STcmsGAESr06BYGE8woZdSdEgqnpyqac7sugNO+Tr4bGwGF3MsnEkGKhU2KL2xh6Ec+BqsaHA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="script.js"></script>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three":         "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // ── Colour scale — exact match with 2D version ──────────────────────────
+    const COLOUR_SCALE = [
+      { below: -20,      hex: '#1a0050', label: '< −20'      },
+      { below: -10,      hex: '#0000cd', label: '−20 to −10' },
+      { below:   0,      hex: '#4169e1', label: '−10 to 0'   },
+      { below:   5,      hex: '#00bfff', label: '0 to 5'     },
+      { below:  10,      hex: '#20b2aa', label: '5 to 10'    },
+      { below:  15,      hex: '#2e8b57', label: '10 to 15'   },
+      { below:  20,      hex: '#9acd32', label: '15 to 20'   },
+      { below:  25,      hex: '#ffd700', label: '20 to 25'   },
+      { below:  30,      hex: '#ff8c00', label: '25 to 30'   },
+      { below:  35,      hex: '#ff4500', label: '30 to 35'   },
+      { below: Infinity, hex: '#8b0000', label: '> 35'       },
+    ];
+
+    function tempToHex(degC) {
+      for (const band of COLOUR_SCALE) {
+        if (degC < band.below) return band.hex;
+      }
+      return COLOUR_SCALE[COLOUR_SCALE.length - 1].hex;
+    }
+
+    // ── Date utilities ──────────────────────────────────────────────────────
+    function toISODate(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function shiftDays(date, n) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + n);
+      return d;
+    }
+
+    // ── Year ────────────────────────────────────────────────────────────────
+    const THIS_YEAR = new Date().getFullYear();
+
+    // ── Idle grey rows (matches makeIdleRows in 2D) ─────────────────────────
+    function makeIdleColors() {
+      const COUNT = 365, MIN_V = 0x3a, MAX_V = 0x8a, STEP = 7;
+      let v = 0x62, s = 1;
+      const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0xffffffff; };
+      return Array.from({ length: COUNT }, () => {
+        v = Math.max(MIN_V, Math.min(MAX_V, Math.round(v + (rand() - 0.5) * 2 * STEP)));
+        const h = v.toString(16).padStart(2, '0');
+        return `#${h}${h}${h}`;
+      });
+    }
+
+    // ── Geocoding / API ─────────────────────────────────────────────────────
+    let pickedLocation = null;
+    let debounceTimer  = null;
+    let activeOptIdx   = -1;
+
+    function getOpts() {
+      return Array.from(document.querySelectorAll('.place-opt'));
+    }
+
+    async function onPlaceInput() {
+      pickedLocation = null;
+      const query = document.getElementById('place-input').value.trim();
+      clearTimeout(debounceTimer);
+      if (query.length < 2) { closeDropdown(); return; }
+      debounceTimer = setTimeout(async () => {
+        try {
+          const url = `https://geocoding-api.open-meteo.com/v1/search` +
+                      `?name=${encodeURIComponent(query)}&count=6&language=en&format=json`;
+          const json = await (await fetch(url)).json();
+          populateDropdown(json.results || []);
+        } catch { closeDropdown(); }
+      }, 280);
+    }
+
+    function populateDropdown(results) {
+      const dd = document.getElementById('place-dropdown');
+      activeOptIdx = -1;
+      dd.innerHTML = '';
+      if (!results.length) { closeDropdown(); return; }
+      results.forEach(r => {
+        const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+        const div   = document.createElement('div');
+        div.className = 'place-opt';
+        div.setAttribute('role', 'option');
+        div.textContent = label;
+        div.addEventListener('mousedown', e => { e.preventDefault(); pickOption(r, label); });
+        dd.appendChild(div);
+      });
+      dd.style.display = 'block';
+    }
+
+    function pickOption(result, label) {
+      pickedLocation = { latitude: result.latitude, longitude: result.longitude, label };
+      document.getElementById('place-input').value = label;
+      closeDropdown();
+    }
+
+    function closeDropdown() {
+      const dd = document.getElementById('place-dropdown');
+      activeOptIdx = -1;
+      dd.style.display = 'none';
+    }
+
+    function onPlaceKeydown(e) {
+      const dd = document.getElementById('place-dropdown');
+      if (dd.style.display !== 'block') return;
+      const opts = getOpts();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeOptIdx = Math.min(activeOptIdx + 1, opts.length - 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeOptIdx = Math.max(activeOptIdx - 1, -1);
+      } else if (e.key === 'Enter' && activeOptIdx >= 0) {
+        e.preventDefault();
+        opts[activeOptIdx].dispatchEvent(new MouseEvent('mousedown'));
+        return;
+      } else if (e.key === 'Escape') {
+        closeDropdown(); return;
+      }
+      opts.forEach((o, i) =>
+        o.setAttribute('aria-selected', i === activeOptIdx ? 'true' : 'false'));
+    }
+
+    async function geocode(placeName) {
+      const url = `https://geocoding-api.open-meteo.com/v1/search` +
+                  `?name=${encodeURIComponent(placeName)}&count=1&language=en&format=json`;
+      const res  = await fetch(url);
+      if (!res.ok) throw new Error(`Geocoding HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json.results?.length) throw new Error(`No results for "${placeName}"`);
+      const r = json.results[0];
+      return { latitude: r.latitude, longitude: r.longitude,
+               label: [r.name, r.admin1, r.country].filter(Boolean).join(', ') };
+    }
+
+    async function fetchArchive(lat, lon, startDate, endDate) {
+      const url = `https://archive-api.open-meteo.com/v1/archive` +
+                  `?latitude=${lat}&longitude=${lon}` +
+                  `&start_date=${startDate}&end_date=${endDate}` +
+                  `&daily=temperature_2m_max,temperature_2m_min` +
+                  `&timezone=auto`;
+      const res  = await fetch(url);
+      if (!res.ok) throw new Error(`Archive API HTTP ${res.status}`);
+      const json = await res.json();
+      if (!json.daily?.time) throw new Error('Unexpected archive response shape');
+      return json.daily;
+    }
+
+    function parseDailyData(daily) {
+      return daily.time.map((date, i) => {
+        const high = daily.temperature_2m_max[i];
+        const low  = daily.temperature_2m_min[i];
+        const avg  = (high != null && low != null) ? (high + low) / 2 : (high ?? low ?? 0);
+        return { date, avg };
+      });
+    }
+
+    function makeSampleData(startDateStr, endDateStr) {
+      const days = [];
+      let cur    = new Date(startDateStr + 'T12:00:00');
+      const end  = new Date(endDateStr   + 'T12:00:00');
+      while (cur <= end) {
+        const doy      = Math.round((cur - new Date(cur.getFullYear(), 0, 0)) / 86400000);
+        const seasonal = 10 * Math.sin((doy / 365) * 2 * Math.PI - Math.PI / 2);
+        const noise    = (Math.random() - 0.5) * 6;
+        days.push({ date: toISODate(cur), avg: 12 + seasonal + noise });
+        cur = shiftDays(cur, 1);
+      }
+      return days;
+    }
+
+    // ── UI helpers ──────────────────────────────────────────────────────────
+    function setStatus(msg, isError = false) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className   = isError ? 'error' : '';
+    }
+
+    function buildYearSelect() {
+      const sel = document.getElementById('year-select');
+      for (let y = THIS_YEAR; y >= 2000; y--) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        if (y === THIS_YEAR - 1) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      refreshYearNotice();
+    }
+
+    function refreshYearNotice() {
+      const year   = parseInt(document.getElementById('year-select').value, 10);
+      const notice = document.getElementById('year-notice');
+      if (year === THIS_YEAR) {
+        const safeEnd  = shiftDays(new Date(), -5);
+        const dayCount = Math.round((safeEnd - new Date(THIS_YEAR, 0, 1)) / 86400000) + 1;
+        notice.textContent =
+          `${THIS_YEAR} isn't over yet — showing ${dayCount} completed days.`;
+      } else {
+        notice.textContent = '';
+      }
+    }
+
+    // ── Three.js scene ──────────────────────────────────────────────────────
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled     = true;
+    renderer.shadowMap.type        = THREE.PCFSoftShadowMap;
+    renderer.toneMapping           = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure   = 1.1;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x12100e);
+    scene.fog = new THREE.Fog(0x12100e, 12, 22);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.01, 50);
+    camera.position.set(0, 0.4, 5.8);
+    camera.lookAt(0, 0, 0);
+
+    // ── Peripheral tilt state ────────────────────────────────────────────────
+    const MAX_TILT  = 0.09;   // ±radians — wide enough to reveal thickness and ply profile
+    const TILT_DAMP = 0.035;  // lerp factor — responsive but still weighted
+    let   tiltX     = 0.0;    // damped fabric bend target X (pointer.y)
+    let   tiltY     = 0.0;    // damped fabric bend target Y (pointer.x)
+
+    // Warm ambient
+    scene.add(new THREE.AmbientLight(0xfff5e8, 1.8));
+
+    // Warm key light — shapes the bulge without overpowering the ambient fill
+    const key = new THREE.DirectionalLight(0xffe8c8, 1.0);
+    key.position.set(0, 6, 4);           // centered overhead so all 4 corners shadow evenly
+    key.castShadow              = true;
+    key.shadow.mapSize.width    = 2048;
+    key.shadow.mapSize.height   = 2048;
+    key.shadow.camera.left      = -3.5;
+    key.shadow.camera.right     =  3.5;
+    key.shadow.camera.top       =  3.5;
+    key.shadow.camera.bottom    = -3.5;
+    key.shadow.camera.near      = 0.5;
+    key.shadow.camera.far       = 25;
+    key.shadow.bias             = -0.0005;
+    scene.add(key);
+
+    // Cool fill from lower-left
+    const fillLight = new THREE.DirectionalLight(0xc8d8ff, 0.45);
+    fillLight.position.set(-3, -2, 2);
+    scene.add(fillLight);
+
+    // Rim light from below-back — catches the chunky side edges against the dark bg
+    const rimLight = new THREE.DirectionalLight(0xfff5e8, 1.2);
+    rimLight.position.set(0, -4, -4);
+    scene.add(rimLight);
+
+    // ── Blanket geometry ────────────────────────────────────────────────────
+    const W = 2.20, H = 3.4, D = 0.45;
+    const geo = new THREE.BoxGeometry(W, H, D, 180, 365, 1);
+    const pos = geo.attributes.position;
+    const CORNER_RADIUS = 0.08; // subtle rounding — soft but structurally square
+
+    // 0 = Back, 1 = Front, 2 = Rim — labelled BEFORE sag/bow moves vertices
+    const vertType = new Uint8Array(pos.count);
+
+    for (let i = 0; i < pos.count; i++) {
+      const _vx = pos.getX(i), _vy = pos.getY(i), _vz = pos.getZ(i);
+      const isRim = Math.abs(_vx) >= (W * 0.5) - 0.001 || Math.abs(_vy) >= (H * 0.5) - 0.001;
+      vertType[i] = isRim ? 2 : (_vz > 0 ? 1 : 0);
+
+      let vx = pos.getX(i);
+      let vy = pos.getY(i);
+      const vz = pos.getZ(i);
+
+      // 0. Rounded corners — project corner-zone vertices onto a circular arc
+      const cx = Math.abs(vx) - (W * 0.5 - CORNER_RADIUS);
+      const cy = Math.abs(vy) - (H * 0.5 - CORNER_RADIUS);
+      if (cx > 0 && cy > 0) {
+        const cd = Math.sqrt(cx * cx + cy * cy);
+        if (cd > CORNER_RADIUS) {
+          vx = Math.sign(vx) * ((W * 0.5 - CORNER_RADIUS) + CORNER_RADIUS * cx / cd);
+          vy = Math.sign(vy) * ((H * 0.5 - CORNER_RADIUS) + CORNER_RADIUS * cy / cd);
+          pos.setX(i, vx);
+          pos.setY(i, vy);
+        }
+      }
+
+      // 1. Micro-tension edge — microscopic warp that barely breaks the straight line
+      const edgeDist = Math.abs(vx / (W * 0.5));
+      if (edgeDist > 0.85) {
+        const edgeWeight = edgeDist - 0.85;
+        const microWarp  = (edgeWeight * edgeWeight) * 0.002 * Math.sin(vy * 0.4);
+        pos.setX(i, vx + (vx > 0 ? microWarp : -microWarp));
+      }
+
+      // 4. Micro-fuzz — pseudo-random per-vertex Z noise breaks up flat planes
+      //    into tiny light-catching facets that read as yarn loft
+      const fuzz = Math.sin(vx * 140.0) * Math.cos(vy * 140.0) * 0.008;
+      pos.setZ(i, pos.getZ(i) + fuzz);
+
+      // 5. Stitch grooves — cosine wave carves a physical valley between every row
+      const stitchGroove  = Math.cos(vy * 280.0) * 0.012;
+      // Vertical ribs — slight horizontal texture mimics column stitch structure
+      const verticalRibs  = Math.sin(vx * 180.0) * 0.005;
+      pos.setZ(i, pos.getZ(i) + stitchGroove + verticalRibs);
+
+      // 6. Frayed yarn halo — protruding fiber spikes along outer perimeter
+      const edgeDistX = Math.abs(vx / (W * 0.5));
+      const edgeDistY = Math.abs(vy / (H * 0.5));
+      // Skip fray noise inside the rounded corner zone so the arcs stay clean
+      const cx_fray = Math.abs(pos.getX(i)) - (W * 0.5 - CORNER_RADIUS);
+      const cy_fray = Math.abs(pos.getY(i)) - (H * 0.5 - CORNER_RADIUS);
+      const isCorner = cx_fray > 0 && cy_fray > 0;
+      if ((edgeDistX > 0.88 || edgeDistY > 0.88) && !isCorner) {
+        const frayNoise = Math.sin(vx * 400.0) * Math.cos(vy * 400.0);
+        if (edgeDistX > edgeDistY) {
+          pos.setX(i, pos.getX(i) + Math.sign(vx) * Math.abs(frayNoise) * 0.012);
+        } else {
+          pos.setY(i, pos.getY(i) + Math.sign(vy) * Math.abs(frayNoise) * 0.012);
+        }
+        pos.setZ(i, pos.getZ(i) + frayNoise * 0.008);
+      }
+    }
+    geo.computeVertexNormals();
+
+    // Pristine snapshot — every deformation reads from this so the blanket never
+    // permanently drifts away from its sag+bow resting shape.
+    geo.userData.originalPositions = new Float32Array(geo.attributes.position.array);
+
+    // Pre-cache per-vertex X and Y (never change) and the resting Z (sag + bow).
+    // Hover lift is added on top of baseZ each frame; currentZ is what gets written.
+    const numVerts = pos.count;
+    const posArr   = pos.array;           // typed-array ref — avoids getter overhead
+    const baseX    = new Float32Array(numVerts);
+    const baseY    = new Float32Array(numVerts);
+    const baseZ    = new Float32Array(numVerts);
+    const currentZ = new Float32Array(numVerts);
+    const flipZ    = new Float32Array(numVerts);
+    const flipX    = new Float32Array(numVerts);
+    const flipY    = new Float32Array(numVerts);
+    for (let i = 0; i < numVerts; i++) {
+      baseX[i] = posArr[i * 3];
+      baseY[i] = posArr[i * 3 + 1];
+      baseZ[i] = currentZ[i] = posArr[i * 3 + 2];
+      flipZ[i] = 0;
+      flipX[i] = 0;
+      flipY[i] = 0;
+    }
+
+    // ── Vertex colours — map each vertex's Y position to a day hex colour ───
+    // BoxGeometry has separate vertex instances per face, so all 6 faces get
+    // the same Y→day mapping, giving clean horizontal stripes through the depth.
+    const colorArrCurrent  = new Float32Array(numVerts * 3);
+    const colorArrNext     = new Float32Array(numVerts * 3);
+    const colorAttrCurrent = new THREE.BufferAttribute(colorArrCurrent, 3);
+    const colorAttrNext    = new THREE.BufferAttribute(colorArrNext, 3);
+    geo.setAttribute('color',      colorAttrCurrent);
+    geo.setAttribute('aColorNext', colorAttrNext);
+
+    function applyVertexColors(hexColors, targetArr = colorArrCurrent, targetAttr = colorAttrCurrent) {
+      const n = hexColors.length;
+      // Pre-parse so the inner loop does no string work
+      const parsed = hexColors.map(h => [
+        parseInt(h.slice(1, 3), 16) / 255,
+        parseInt(h.slice(3, 5), 16) / 255,
+        parseInt(h.slice(5, 7), 16) / 255,
+      ]);
+      for (let i = 0; i < numVerts; i++) {
+        // Y ∈ [-H/2, +H/2]; top (+H/2) = day 0 (Jan), bottom (-H/2) = day n-1
+        const t      = 0.5 - baseY[i] / H;
+        const dayIdx = Math.max(0, Math.min(n - 1, Math.round(t * (n - 1))));
+        let [r, g, b] = parsed[dayIdx];
+
+        if (vertType[i] === 2) {
+          // Rim (side thickness faces) — 70% darker, frames the 3D ply as a dark sandwich
+          r *= 0.30; g *= 0.30; b *= 0.30;
+        } else if (vertType[i] === 0) {
+          // Back face — 55% darker, deep shadow on the underside during folds
+          r *= 0.45; g *= 0.45; b *= 0.45;
+        } else {
+          // Front face — AO edge darkening only
+          const edgeFactor = Math.abs(baseX[i] / (W * 0.5));
+          if (edgeFactor > 0.7) {
+            const darken = 1.0 - ((edgeFactor - 0.7) / 0.3) * 0.35;
+            r *= darken; g *= darken; b *= darken;
+          }
+        }
+
+        targetArr[i * 3]     = r;
+        targetArr[i * 3 + 1] = g;
+        targetArr[i * 3 + 2] = b;
+      }
+      targetAttr.needsUpdate = true;
+    }
+
+    // Initialize both buffers identically so wipe starts with no visible change
+    applyVertexColors(makeIdleColors());
+    colorArrNext.set(colorArrCurrent);
+    colorAttrNext.needsUpdate = true;
+
+    function updateBlanketTexture(hexColors) {
+      // Write incoming colors into the "next" slot
+      applyVertexColors(hexColors, colorArrNext, colorAttrNext);
+      blanketUniforms.uBloomProgress.value = 0;
+      gsap.to(blanketUniforms.uBloomProgress, {
+        value: 1,
+        duration: 3.5,
+        ease: 'power1.inOut',
+        onComplete() {
+          // Swap next → current behind the scenes; reset wipe so it's ready again
+          colorArrCurrent.set(colorArrNext);
+          colorAttrCurrent.needsUpdate = true;
+          blanketUniforms.uBloomProgress.value = 0;
+        }
+      });
+    }
+
+    function createYarnBumpMap() {
+      const canvas = document.createElement('canvas');
+      canvas.width  = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, 256, 256);
+
+      for (let y = 0; y < 256; y += 32) {
+        for (let x = 0; x < 256; x += 32) {
+          const xOffset = (y % 64 === 0) ? 0 : 16;
+          const cx = x + xOffset + 16;
+          const cy = y + 16;
+          const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 20);
+          grad.addColorStop(0, '#ffffff');
+          grad.addColorStop(1, '#808080');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(18, 140);
+      return tex;
+    }
+    const yarnBumpMap = createYarnBumpMap();
+
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness:    0.9,
+      metalness:    0.0,
+      flatShading:  false,
+      bumpMap:      yarnBumpMap,
+      bumpScale:    0.045,
+      side:         THREE.DoubleSide,
+    });
+
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uBloomProgress = blanketUniforms.uBloomProgress;
+
+      shader.vertexShader = `
+        uniform float uBloomProgress;
+        varying float vDisplacedY;
+        attribute vec3 aColorNext;
+        varying vec3 vColorNext;
+      ` + shader.vertexShader;
+
+      shader.vertexShader = shader.vertexShader.replace(
+        `#include <begin_vertex>`,
+        `#include <begin_vertex>
+        vColorNext = aColorNext;
+
+        // Physical ripple — traveling fold at the wipe line
+        float normYv    = clamp((position.y + ${(H * 0.5).toFixed(2)}) / ${H.toFixed(2)}, 0.0, 1.0);
+        float progressV = 1.2 - (uBloomProgress * 1.4);
+        float distV     = normYv - progressV;
+        float ripple    = pow(smoothstep(0.08, 0.0, abs(distV)), 1.5);
+        transformed.z  += ripple * 0.10;
+        transformed.y  -= ripple * sign(distV) * 0.015;
+
+        // Capture world-Y AFTER the ripple so the fragment wipe aligns with actual geometry
+        vDisplacedY = (modelMatrix * vec4(transformed, 1.0)).y;`
+      );
+
+      shader.fragmentShader = `
+        uniform float uBloomProgress;
+        varying float vDisplacedY;
+        varying vec3  vColorNext;
+      ` + shader.fragmentShader;
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+        `#include <color_fragment>`,
+        `#ifdef USE_COLOR
+          // Normalize post-ripple world-Y to 0..1 — stays in sync with the geometry wave
+          float normY    = clamp((vDisplacedY + ${(H * 0.5).toFixed(2)}) / ${H.toFixed(2)}, 0.0, 1.0);
+          float progress = 1.2 - (uBloomProgress * 1.4);
+          float wipe     = smoothstep(progress - 0.005, progress + 0.005, normY);
+          diffuseColor.rgb *= mix(vColor, vColorNext, wipe);
+        #endif`
+      );
+    };
+
+    const blanket = new THREE.Mesh(geo, mat);
+    blanket.rotation.x    = 0;
+    blanket.rotation.y    = 0;
+    blanket.castShadow    = true;
+    blanket.receiveShadow = true;
+    scene.add(blanket);
+
+    // ── Hover lift ───────────────────────────────────────────────────────────
+    const HOVER_RADIUS = 0.40;                          // cloth displacement radius (world units)
+    const HOVER_LIFT   = 0.55;                          // peak Z push toward camera
+    const HOVER_DAMP   = 0.025;                         // lerp factor per frame — heavy drag
+    const SIGMA2       = (HOVER_RADIUS * 0.42) ** 2;   // pre-baked Gaussian denominator
+
+    const raycaster      = new THREE.Raycaster();
+    const pointer        = new THREE.Vector2(Infinity, Infinity);
+    let   isHovering     = false;
+    let   hoverActive    = false;  // true while any vertex is still moving
+    const targetHoverPt  = new THREE.Vector3();
+    const currentHoverPt = new THREE.Vector3();
+    const HOVER_FRICTION = 0.04;   // low = heavy drag, high = slippery
+    const FRICTION_GRID  = 0.06;   // stitch-snap grid size in world units
+
+    renderer.domElement.addEventListener('pointermove', e => {
+      if (isRolling) { isHovering = false; return; }
+      pointer.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+      pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      if (!isHovering) { isHovering = true; hoverActive = true; }
+    });
+    renderer.domElement.addEventListener('pointerleave', () => {
+      isHovering = false;
+      // hoverActive stays true until vertices settle; the loop gates itself off
+    });
+
+    // ── Corner flip ──────────────────────────────────────────────────────────
+    // Compute the exact bounding box in local space — corners derived from min/max,
+    // not guessed from W/H, so they're correct even after sag+bow displacement.
+    geo.computeBoundingBox();
+
+    const blanketUniforms = {
+      uBloomProgress: { value: 0.0 }
+    };
+
+    let activeTween = null;
+    const rollTarget = { progress: 0 };
+    let isRolling = false;
+
+    function applyRollMath() {
+      const rawP = rollTarget.progress;
+      const p = Math.max(0, Math.min(1, rawP));
+      const ROLL_RADIUS = 0.18;
+      const drapeIntensity = 1 - p;
+
+      for (let i = 0; i < numVerts; i++) {
+        const vx = baseX[i];
+        const vy = baseY[i];
+
+        const nx = vx / (W * 0.5);
+        const ny = vy / (H * 0.5);
+        const hangFactor  = Math.max(0, (1 - ny) / 2);
+        const drapeFolds  = Math.sin(nx * Math.PI * 3.0) * 0.22 * hangFactor;
+        const sag         = -0.14 * (1 - ny * ny);
+        const edgePinch   = (1 - nx * nx) * 0.06 * Math.sign(vx) * hangFactor;
+        const bottomDroop = (1 - nx * nx) * 0.12 * hangFactor;
+        const topDroop    = (1 - nx * nx) * 0.04;
+
+        const dX = -edgePinch * drapeIntensity;
+        const dY = -(bottomDroop + topDroop) * drapeIntensity;
+        const dZ = (sag + drapeFolds) * drapeIntensity;
+
+        const distFromTop = (H * 0.5) - vy;
+        const flatLength  = H * (1 - p);
+
+        if (distFromTop > flatLength) {
+          const rolledDist = distFromTop - flatLength;
+          const theta = rolledDist / ROLL_RADIUS;
+          const curlZ = ROLL_RADIUS * (1 - Math.cos(theta));
+          const curlY = ROLL_RADIUS * Math.sin(theta);
+          flipZ[i] = dZ + curlZ;
+          flipY[i] = dY + (distFromTop - flatLength) + curlY;
+          flipX[i] = dX;
+        } else {
+          flipX[i] = dX;
+          flipY[i] = dY;
+          flipZ[i] = dZ;
+        }
+      }
+    }
+    applyRollMath(); // initialize idle drape on load
+
+    renderer.domElement.addEventListener('pointerdown', e => {
+      raycaster.setFromCamera(new THREE.Vector2(
+         (e.clientX / window.innerWidth)  * 2 - 1,
+        -(e.clientY / window.innerHeight) * 2 + 1
+      ), camera);
+      const hits = raycaster.intersectObject(blanket);
+      if (!hits.length) return;
+
+      if (activeTween) { activeTween.kill(); }
+      rollTarget.progress = 0;
+      isRolling = true;
+
+      activeTween = gsap.timeline({
+        onUpdate: applyRollMath,
+        onComplete() { isRolling = false; activeTween = null; applyRollMath(); }
+      });
+      activeTween
+        .to(rollTarget, { progress: 0.5, duration: 0.6, ease: 'power2.inOut' })
+        .to(rollTarget, { progress: 0, duration: 1.0, ease: 'back.out(1.2)' });
+    });
+
+    // ── Render loop ─────────────────────────────────────────────────────────
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Peripheral tilt — lerp toward pointer-driven target; guard Infinity on first frame
+      if (isFinite(pointer.x)) {
+        // Damp the pointer targets — fabric bend uses these per-vertex, not mesh rotation
+        tiltX = THREE.MathUtils.lerp(tiltX,  pointer.y * 0.35, TILT_DAMP);
+        tiltY = THREE.MathUtils.lerp(tiltY,  pointer.x * 0.35, TILT_DAMP);
+
+        // Dynamic lighting — sweep key and rim with cursor so stitch shadows shift
+        key.position.x     =  pointer.x * 1.5;
+        key.position.y     =  6.0 + pointer.y * 0.8;
+        rimLight.position.x = -pointer.x * 1.2;
+        rimLight.position.y = -4.0 - pointer.y * 0.5;
+      }
+
+      // ── Vertex loop — runs every frame for continuous breathing ─────────────
+      let hitPt = null;
+      if (isHovering) {
+        raycaster.setFromCamera(pointer, camera);
+        const hits = raycaster.intersectObject(blanket);
+        if (hits.length) {
+          // Snap to stitch grid for tactile yarn-bump friction
+          const snappedX = Math.round(hits[0].point.x / FRICTION_GRID) * FRICTION_GRID;
+          const snappedY = Math.round(hits[0].point.y / FRICTION_GRID) * FRICTION_GRID;
+          targetHoverPt.set(snappedX, snappedY, hits[0].point.z);
+          // Lerp current position toward target — low factor = heavy fabric drag
+          currentHoverPt.lerp(targetHoverPt, HOVER_FRICTION);
+          hitPt = currentHoverPt;
+        }
+      }
+
+      const time = performance.now() * 0.0012;
+      let maxDelta = 0;
+
+      for (let i = 0; i < numVerts; i++) {
+        // 1. Hover target calculation (isolated)
+        let target = baseZ[i];
+        let hoverPullY = 0;
+        if (hitPt) {
+          const dx   = baseX[i] - hitPt.x;
+          const dy   = baseY[i] - hitPt.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const fabricFalloff = Math.max(0, 1 - (dist / HOVER_RADIUS));
+          target += HOVER_LIFT * (fabricFalloff * fabricFalloff * (3 - 2 * fabricFalloff));
+          // Upward Y tension — fabric hiked up around the cursor like cloth being grabbed
+          hoverPullY = 0.15 * fabricFalloff * Math.max(0, baseY[i] - hitPt.y + 0.5);
+        }
+
+        const prev = currentZ[i];
+        currentZ[i] = prev + (target - prev) * HOVER_DAMP;
+
+        // 2. Hanging drape weight — 0 at top anchor, 1.0 at bottom hem
+        const hangWeight = Math.max(0, (H * 0.5 - baseY[i]) / H);
+
+        // 3. Heavy cascading wave rolling downward
+        const breathZ = (Math.sin(time + baseY[i] * 1.5 + baseX[i] * 0.8) * 0.08) * hangWeight;
+        const breathX = (Math.cos(time * 0.7 - baseY[i] * 0.6) * 0.03) * hangWeight;
+
+        // 4. Fluid fabric bending — top pinned, bottom swings with damped pointer tilt
+        const fabricBendZ = (tiltX * hangWeight * hangWeight) * (1.0 - Math.abs(baseX[i]) / W);
+        const fabricBendX = (tiltY * hangWeight) * (baseY[i] * 0.1);
+
+        // 5. Combine: base + flip + hover Y-pull + breathing + fabric bend
+        posArr[i * 3]     = baseX[i] + flipX[i] + breathX + fabricBendX;
+        posArr[i * 3 + 1] = baseY[i] + flipY[i] + hoverPullY;
+        posArr[i * 3 + 2] = currentZ[i] + flipZ[i] + breathZ + fabricBendZ;
+
+        const delta = Math.abs(currentZ[i] - baseZ[i]);
+        if (delta > maxDelta) maxDelta = delta;
+      }
+
+      pos.needsUpdate = true;
+      geo.computeVertexNormals();
+
+      // Reset hover damping state once pointer has left and all vertices settled
+      if (!isHovering && maxDelta < 0.0002 && !activeTween) {
+        for (let i = 0; i < numVerts; i++) currentZ[i] = baseZ[i];
+        hoverActive = false;
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ── Generate ────────────────────────────────────────────────────────────
+    async function generate() {
+      const placeText = document.getElementById('place-input').value.trim();
+      const year      = parseInt(document.getElementById('year-select').value, 10);
+      const btn       = document.getElementById('generate-btn');
+
+      if (!placeText) { setStatus('Enter a location first.', true); return; }
+
+      btn.disabled = true;
+      setStatus('');
+
+      const startDate = `${year}-01-01`;
+      const endDate   = year === THIS_YEAR
+        ? toISODate(shiftDays(new Date(), -5))
+        : `${year}-12-31`;
+
+      let days;
+      try {
+        let loc;
+        if (pickedLocation) {
+          loc = pickedLocation;
+        } else {
+          setStatus('Looking up location…');
+          loc = await geocode(placeText);
+        }
+        setStatus(`Fetching ${year} temperatures for ${loc.label}…`);
+        const daily = await fetchArchive(loc.latitude, loc.longitude, startDate, endDate);
+        days = parseDailyData(daily);
+        setStatus(`${loc.label} · ${days.length} days · ${startDate} → ${endDate}`);
+      } catch (err) {
+        console.warn('Falling back to sample data:', err);
+        days = makeSampleData(startDate, endDate);
+        setStatus(`Couldn't fetch live data — showing sample instead.`, true);
+      }
+
+      updateBlanketTexture(days.map(d => tempToHex(d.avg)));
+      btn.disabled = false;
+    }
+
+    // ── Wire up ──────────────────────────────────────────────────────────────
+    buildYearSelect();
+
+    document.getElementById('generate-btn').addEventListener('click', generate);
+    document.getElementById('year-select').addEventListener('change', refreshYearNotice);
+
+    const placeEl = document.getElementById('place-input');
+    placeEl.addEventListener('input',   onPlaceInput);
+    placeEl.addEventListener('keydown', onPlaceKeydown);
+    placeEl.addEventListener('blur',    () => setTimeout(closeDropdown, 160));
+  </script>
 </body>
 </html>
