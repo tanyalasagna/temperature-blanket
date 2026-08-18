@@ -129,8 +129,8 @@ camera.position.set(0, 0.4, 5.8);
 camera.lookAt(0, 0, 0);
 
 // ── Peripheral tilt state ───────────────────────────────────────────────────
-const MAX_TILT  = 0.09;
-const TILT_DAMP = 0.035;
+const MAX_TILT  = 0.18;
+const TILT_DAMP = 0.055;
 let   tiltX     = 0.0;
 let   tiltY     = 0.0;
 
@@ -474,8 +474,8 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (isFinite(pointer.x)) {
-    tiltX = THREE.MathUtils.lerp(tiltX, pointer.y * 0.35, TILT_DAMP);
-    tiltY = THREE.MathUtils.lerp(tiltY, pointer.x * 0.35, TILT_DAMP);
+    tiltX = THREE.MathUtils.lerp(tiltX, pointer.y * 0.65, TILT_DAMP);
+    tiltY = THREE.MathUtils.lerp(tiltY, pointer.x * 0.65, TILT_DAMP);
     key.position.x      =  pointer.x * 1.5;
     key.position.y      =  6.0 + pointer.y * 0.8;
     rimLight.position.x = -pointer.x * 1.2;
